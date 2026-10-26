@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#FAFAF9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F0F0F" media="(prefers-color-scheme: dark)">
+<style>
+  :root{
+    --bg: #FAFAF9;
+    --panel: #FFFFFF;
+    --fill: #F1F1EF;            /* quiet input / chip fill */
+    --line: #E7E6E3;
+    --text: #171717;
+    --muted: #737373;
+    --faint: #A3A3A3;
+    --primary: #171717;         /* primary buttons are ink, not colour */
+    --on-primary: #FFFFFF;
+    --accent: #C2410C;          /* used sparingly: focus, record label */
+    --danger: #B42318;
+    --sleeve: #E9E8E5;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg: #0F0F0F; --panel: #171717; --fill: #1F1F1F; --line: #2A2A2A;
+      --text: #F5F5F5; --muted: #A3A3A3; --faint: #6B6B6B;
+      --primary: #F5F5F5; --on-primary: #0F0F0F; --accent: #F07A3F; --danger: #F07070;
+      --sleeve: #1C1C1C;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg: #0F0F0F; --panel: #171717; --fill: #1F1F1F; --line: #2A2A2A;
+    --text: #F5F5F5; --muted: #A3A3A3; --faint: #6B6B6B;
+    --primary: #F5F5F5; --on-primary: #0F0F0F; --accent: #F07A3F; --danger: #F07070;
+    --sleeve: #1C1C1C;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ background:var(--bg); }
+  body{
+    color:var(--text); font-family:'Inter',system-ui,sans-serif; font-size:15px; line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:flex; justify-content:center; padding:32px 16px 64px;
+  }
+  @media (min-width:700px){ body{ padding:56px 32px 80px; } }
+  button,input,select,textarea{ font:inherit; color:inherit; }
+  .app{ width:100%; max-width:960px; }
+  .pane{ display:none; }
+  .pane.active{ display:block; animation:fade .2s ease; }
+  @keyframes fade{ from{opacity:0;} to{opacity:1;} }
+
+  header.top{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:28px; }
+  .top-actions{ display:flex; align-items:center; gap:4px; }
+  h1{ font-size:28px; font-weight:700; letter-spacing:-.03em; line-height:1; display:flex; align-items:baseline; gap:10px; }
+  h2{ font-size:24px; font-weight:700; letter-spacing:-.025em; line-height:1.15; }
+  .sub{ color:var(--faint); font-size:14px; font-weight:500; letter-spacing:0; }
+  .page-title{ margin-bottom:24px; }
+
+  .btn{ border:1px solid var(--line); background:transparent; border-radius:999px; padding:9px 16px; cursor:pointer; font-weight:500; font-size:14px; transition:background .15s, border-color .15s; }
+  .btn:hover{ background:var(--fill); }
+  .btn-primary{ background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  .btn-primary:hover{ background:var(--primary); opacity:.85; }
+  .btn-primary:disabled{ opacity:.4; cursor:default; }
+  .btn-danger{ color:var(--danger); }
+  .icon-btn{ border:none; background:none; cursor:pointer; width:36px; height:36px; border-radius:999px; color:var(--muted);
+    display:inline-flex; align-items:center; justify-content:center; transition:background .15s, color .15s; }
+  .icon-btn:hover{ background:var(--fill); color:var(--text); }
+  .icon-btn svg{ width:18px; height:18px; }
+
+  /* toolbar: search, sort, view toggle */
+  .toolbar{ display:flex; gap:8px; align-items:center; margin-bottom:14px; }
+  .search{ position:relative; flex:1; min-width:0; }
+  .search svg{ position:absolute; left:12px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:var(--faint); pointer-events:none; }
+  .search input[type=text]{ padding-left:36px; }
+  input[type=text],input[type=url],select,textarea{
+    width:100%; background:var(--fill); border:1px solid transparent; border-radius:10px; padding:10px 12px; outline:none;
+    transition:border-color .15s, background .15s;
+  }
+  input::placeholder,textarea::placeholder{ color:var(--faint); }
+  input:focus,select:focus,textarea:focus{ background:var(--panel); border-color:var(--line); box-shadow:0 0 0 3px color-mix(in srgb, var(--text) 6%, transparent); }
+  .sort{ width:auto; background:transparent; color:var(--muted); font-size:14px; padding:10px 6px; cursor:pointer; }
+  .sort:hover{ color:var(--text); }
+  .sort:focus{ background:transparent; box-shadow:none; border-color:transparent; }
+  textarea{ min-height:80px; resize:vertical; }
+
+  .seg{ display:inline-flex; background:var(--fill); border-radius:999px; padding:3px; flex:none; }
+  .seg button{ border:none; background:none; width:32px; height:30px; border-radius:999px; cursor:pointer; color:var(--faint);
+    display:inline-flex; align-items:center; justify-content:center; }
+  .seg button svg{ width:16px; height:16px; }
+  .seg button.on{ background:var(--panel); color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+
+  .chips{ display:flex; gap:2px; overflow-x:auto; margin:0 -4px 28px; padding:0 4px; scrollbar-width:none; }
+  .chips::-webkit-scrollbar{ display:none; }
+  .chip{ flex:none; border:none; background:none; border-radius:999px; padding:5px 11px; font-size:13px; font-weight:500; color:var(--muted); cursor:pointer; white-space:nowrap; }
+  .chip:hover{ color:var(--text); }
+  .chip.on{ background:var(--fill); color:var(--text); }
+  .chip .n{ color:var(--faint); margin-left:3px; }
+
+  /* covers grid */
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:36px 24px; }
+  @media (max-width:520px){ .grid{ grid-template-columns:repeat(2,1fr); gap:28px 16px; } }
+  .card{ cursor:pointer; border:none; background:none; text-align:left; min-width:0; }
+  .cover{ position:relative; aspect-ratio:1; border-radius:3px; overflow:hidden; background:var(--sleeve); }
+  .cover::after{ content:''; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 0 0 1px rgba(0,0,0,.06); pointer-events:none; }
+  .cover img{ position:relative; width:100%; height:100%; object-fit:cover; display:block; }
+  .card .cover{ transition:transform .25s ease, box-shadow .25s ease; }
+  .card:hover .cover{ transform:translateY(-3px); box-shadow:0 10px 24px -12px rgba(0,0,0,.35); }
+  .card .t{ font-weight:600; font-size:14px; margin-top:12px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card .a{ color:var(--muted); font-size:13px; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .placeholder{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .placeholder .disc{ width:58%; aspect-ratio:1; border-radius:50%; border:1px solid color-mix(in srgb, var(--text) 10%, transparent); position:relative; }
+  .placeholder .disc::after{ content:''; position:absolute; inset:38%; border-radius:50%; background:color-mix(in srgb, var(--text) 10%, transparent); }
+
+  /* list view */
+  .list{ display:flex; flex-direction:column; border-top:1px solid var(--line); }
+  .list .row-item{ display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:14px; align-items:center; padding:10px 4px;
+    border:none; border-bottom:1px solid var(--line); background:none; text-align:left; cursor:pointer; width:100%; }
+  .list .row-item:hover{ background:var(--fill); }
+  .list .cover{ width:52px; border-radius:2px; }
+  .list .t{ font-weight:600; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list .a{ color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .list .y{ color:var(--faint); font-size:13px; font-variant-numeric:tabular-nums; text-align:right; }
+  .list .g{ display:none; color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  @media (min-width:640px){
+    .list .row-item{ grid-template-columns:52px minmax(0,2fr) minmax(0,1fr) 56px; gap:20px; }
+    .list .g{ display:block; }
+  }
+
+  .empty{ text-align:center; padding:80px 20px; color:var(--muted); max-width:380px; margin:0 auto; }
+  .empty h2{ color:var(--text); margin-bottom:8px; font-size:20px; }
+  .empty .btn{ margin-top:22px; }
+  .empty-disc{ width:72px; height:72px; margin:0 auto 22px; border-radius:50%; border:1px solid var(--line); position:relative; }
+  .empty-disc::after{ content:''; position:absolute; inset:38%; border-radius:50%; background:var(--accent); }
+
+  .back{ display:inline-flex; align-items:center; gap:6px; color:var(--muted); background:none; border:none; cursor:pointer; padding:4px 0; margin-bottom:24px; font-weight:500; font-size:14px; }
+  .back:hover{ color:var(--text); }
+
+  .narrow{ max-width:600px; }
+  .panel{ background:transparent; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:13px; font-weight:500; color:var(--muted); margin-bottom:6px; }
+  .field label .hint{ color:var(--faint); font-weight:400; }
+  .row{ display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+  .row3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:0 12px; }
+  @media (max-width:520px){ .row3{ grid-template-columns:1fr 1fr; } }
+  .section-label{ font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin:12px 0 14px; padding-top:20px; border-top:1px solid var(--line); }
+  .actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:20px; flex-wrap:wrap; }
+  .status{ color:var(--muted); font-size:14px; margin:24px 0 12px; display:flex; align-items:center; gap:10px; }
+  .status.err{ color:var(--danger); }
+  .spinner{ width:14px; height:14px; border-radius:50%; border:1.5px solid var(--line); border-top-color:var(--text); animation:spin .8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .results{ display:flex; flex-direction:column; }
+  .result{ display:flex; gap:14px; align-items:center; padding:10px 4px; background:none; border:none; border-bottom:1px solid var(--line); cursor:pointer; text-align:left; width:100%; }
+  .result:first-child{ border-top:1px solid var(--line); }
+  .result:hover{ background:var(--fill); }
+  .result .cover{ width:56px; flex:none; border-radius:2px; }
+  .result .meta{ min-width:0; flex:1; }
+  .result .t{ font-weight:600; font-size:14px; }
+  .result .a,.result .d{ color:var(--muted); font-size:13px; }
+  .result .chev{ color:var(--faint); padding-right:6px; }
+  .tag{ display:inline-block; font-size:11px; font-weight:500; padding:1px 7px; border-radius:999px; background:var(--fill); color:var(--muted); margin-left:6px; vertical-align:1px; }
+  .manual{ margin-top:16px; font-size:14px; color:var(--muted); }
+  .manual button{ background:none; border:none; color:var(--text); font-weight:600; cursor:pointer; padding:0; text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line); }
+
+  /* detail */
+  .detail{ display:grid; grid-template-columns:minmax(0,420px) minmax(0,1fr); gap:48px; align-items:start; }
+  @media (max-width:700px){ .detail{ grid-template-columns:1fr; gap:28px; } }
+  .detail .cover{ border-radius:4px; box-shadow:0 20px 40px -24px rgba(0,0,0,.45); }
+  .detail h2{ font-size:30px; }
+  .detail .artist{ color:var(--muted); font-size:18px; margin-top:6px; }
+  .genres{ display:flex; flex-wrap:wrap; gap:6px; margin-top:16px; }
+  .genres .chip{ cursor:default; background:var(--fill); color:var(--muted); }
+  dl.info{ display:grid; grid-template-columns:110px 1fr; margin-top:28px; font-size:14px; border-top:1px solid var(--line); }
+  dl.info dt,dl.info dd{ padding:10px 0; border-bottom:1px solid var(--line); }
+  dl.info dt{ color:var(--muted); }
+  dl.info dd{ overflow-wrap:anywhere; }
+  .notes{ margin-top:24px; white-space:pre-wrap; font-size:14px; color:var(--muted); }
+  .notes::before{ content:'Notes'; display:block; color:var(--faint); font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; margin-bottom:6px; }
+  .src{ margin-top:20px; font-size:13px; color:var(--faint); }
+  .src a{ color:inherit; text-underline-offset:3px; }
+  .src a:hover{ color:var(--text); }
+
+  .edit-wrap{ display:grid; grid-template-columns:120px 1fr; gap:24px; align-items:start; }
+  @media (max-width:520px){ .edit-wrap{ grid-template-columns:1fr; gap:16px; } .edit-wrap > .cover{ width:120px; } }
+  .warn{ background:var(--fill); border-radius:10px; padding:12px 14px; font-size:14px; margin-bottom:20px; }
+  details summary{ cursor:pointer; color:var(--muted); font-size:13px; font-weight:500; margin:4px 0 12px; }
+  .settings-copy{ font-size:14px; color:var(--muted); margin-bottom:20px; max-width:480px; }
+
+  .toast{ position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(12px); opacity:0; pointer-events:none;
+    background:var(--primary); color:var(--on-primary); padding:9px 16px; border-radius:999px; font-weight:500; font-size:14px; transition:.2s; z-index:20; }
+  .toast.show{ opacity:1; transform:translateX(-50%); }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Collection -->
+  <section class="pane active" id="pane-list">
+    <header class="top">
+      <h1>Crate <span class="sub" id="count"></span></h1>
+      <div class="top-actions">
+        <button class="icon-btn" id="settings-btn" title="Back up &amp; restore" aria-label="Back up and restore">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        </button>
+        <button class="btn btn-primary" id="add-btn" data-go="add">Add record</button>
+      </div>
+    </header>
+    <div id="list-controls">
+      <div class="toolbar">
+        <label class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input type="text" id="search" placeholder="Search" aria-label="Search artist, album, label" autocomplete="off">
+        </label>
+        <select id="sort" class="sort" aria-label="Sort">
+          <option value="added">Recently added</option>
+          <option value="artist">Artist</option>
+          <option value="album">Album</option>
+          <option value="year">Year</option>
+        </select>
+        <div class="seg" role="group" aria-label="View">
+          <button type="button" data-view="grid" title="Covers" aria-label="Covers view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>
+          </button>
+          <button type="button" data-view="list" title="List" aria-label="List view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><rect x="3.5" y="4.5" width="3" height="3" rx=".5"/><rect x="3.5" y="10.5" width="3" height="3" rx=".5"/><rect x="3.5" y="16.5" width="3" height="3" rx=".5"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="chips" id="genre-chips"></div>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="empty hidden" id="empty">
+      <div class="empty-disc"></div>
+      <h2>Your crate is empty</h2>
+      <p>Add a record by artist and album — artwork, genre and release info are filled in for you.</p>
+      <button class="btn btn-primary" data-go="add">Add your first record</button>
+    </div>
+    <div class="empty hidden" id="no-match">No records match.</div>
+  </section>
+
+  <!-- Add: search -->
+  <section class="pane narrow" id="pane-add">
+    <button class="back" data-go="list">← Crate</button>
+    <h2 class="page-title">Add a record</h2>
+    <form class="panel" id="lookup-form" autocomplete="off">
+      <div class="field"><label for="q-artist">Artist or band</label><input type="text" id="q-artist" required placeholder="e.g. Fleetwood Mac"></div>
+      <div class="field"><label for="q-album">Album</label><input type="text" id="q-album" required placeholder="e.g. Rumours"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:8px"><button class="btn btn-primary" type="submit" id="lookup-btn">Find album</button></div>
+    </form>
+    <div class="status hidden" id="lookup-status"></div>
+    <div class="results" id="results"></div>
+    <div class="manual hidden" id="manual">Not listed? <button type="button" id="manual-btn">Enter it manually</button></div>
+  </section>
+
+  <!-- Add/Edit: review form -->
+  <section class="pane narrow" id="pane-edit">
+    <button class="back" id="edit-back">← Back</button>
+    <h2 class="page-title" id="edit-title">Review &amp; save</h2>
+    <div class="warn hidden" id="dupe-warn"></div>
+    <form class="panel" id="edit-form" autocomplete="off">
+      <div class="edit-wrap">
+        <div class="cover" id="edit-cover"></div>
+        <div>
+          <div class="row">
+            <div class="field"><label for="f-artist">Artist</label><input type="text" id="f-artist" required></div>
+            <div class="field"><label for="f-album">Album</label><input type="text" id="f-album" required></div>
+          </div>
+          <div class="field"><label for="f-genres">Genres <span class="hint">· comma separated</span></label><input type="text" id="f-genres"></div>
+          <div class="row3">
+            <div class="field"><label for="f-date">Released</label><input type="text" id="f-date" placeholder="YYYY-MM-DD"></div>
+            <div class="field"><label for="f-label">Label</label><input type="text" id="f-label"></div>
+            <div class="field"><label for="f-cat">Catalog #</label><input type="text" id="f-cat"></div>
+            <div class="field"><label for="f-country">Country</label><input type="text" id="f-country"></div>
+            <div class="field"><label for="f-tracks">Tracks</label><input type="text" id="f-tracks" inputmode="numeric"></div>
+            <div class="field"><label for="f-type">Type</label><input type="text" id="f-type" placeholder="Album, EP…"></div>
+          </div>
+        </div>
+      </div>
+      <div class="section-label">Your copy</div>
+      <div class="row">
+        <div class="field"><label for="f-format">Format</label>
+          <select id="f-format">
+            <option value="">—</option><option>LP</option><option>2×LP</option><option>3×LP</option><option>Box set</option>
+            <option>12″ single</option><option>10″</option><option>7″</option><option>Picture disc</option>
+          </select></div>
+        <div class="field"><label for="f-condition">Condition</label>
+          <select id="f-condition">
+            <option value="">—</option><option>Mint (M)</option><option>Near Mint (NM)</option><option>Very Good Plus (VG+)</option>
+            <option>Very Good (VG)</option><option>Good (G)</option><option>Fair / Poor</option>
+          </select></div>
+      </div>
+      <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" placeholder="Pressing, colour, where you bought it…"></textarea></div>
+      <details>
+        <summary>Cover image</summary>
+        <div class="field"><label for="f-art">Image URL</label><input type="url" id="f-art" placeholder="https://…"></div>
+      </details>
+      <div class="actions">
+        <button class="btn" type="button" id="edit-cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit">Save to crate</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Detail -->
+  <section class="pane" id="pane-detail">
+    <button class="back" data-go="list">← Crate</button>
+    <div id="detail"></div>
+  </section>
+
+  <!-- Settings -->
+  <section class="pane" id="pane-settings">
+    <button class="back" data-go="list">← Crate</button>
+    <h2 class="page-title" style="margin-bottom:10px">Back up &amp; restore</h2>
+    <div class="panel">
+      <p class="settings-copy">Your crate is saved in this browser. Download a backup to keep it safe or move it to another device.</p>
+      <div class="actions" style="justify-content:flex-start">
+        <button class="btn" id="export-btn">Download backup</button>
+        <button class="btn" id="export-csv-btn">Export CSV</button>
+        <button class="btn" id="import-btn">Restore from backup</button>
+        <input type="file" id="import-file" accept="application/json,.json" class="hidden">
+      </div>
+    </div>
+    <p class="src">Album data from <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>, artwork from the <a href="https://coverartarchive.org" target="_blank" rel="noopener">Cover Art Archive</a> and iTunes.</p>
+  </section>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ---------- storage ---------- */
+  const KEY = 'crate.records.v1';
+  let records = [];
+  function load(){
+    try { records = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e){ records = []; }
+  }
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(records)); }
+    catch(e){ toast('Could not save — storage is full or blocked'); }
+  }
+
+  /* ---------- helpers ---------- */
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const norm = s => String(s || '').toLowerCase()
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .replace(/\b(remaster(ed)?|deluxe|edition|expanded|anniversary|version)\b/g, '')
+    .replace(/&/g, 'and').replace(/^the\s+/, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const year = d => (d || '').slice(0, 4);
+  const titleCase = s => s.replace(/\b[a-z]/g, c => c.toUpperCase());
+
+  let toastTimer;
+  function toast(msg){
+    const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function coverHTML(src){
+    const ph = '<div class="placeholder"><div class="disc"></div></div>';
+    return src ? ph + `<img src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ph;
+  }
+  // Hide broken covers so the record placeholder shows through.
+  document.addEventListener('error', e => {
+    const img = e.target;
+    if (img.tagName !== 'IMG' || !img.closest('.cover')) return;
+    const fb = img.dataset.fallback;
+    if (fb){ img.removeAttribute('data-fallback'); img.src = fb; }
+    else img.remove();
+  }, true);
+
+  /* ---------- navigation ---------- */
+  let current = 'list';
+  function go(name){
+    document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + name));
+    current = name;
+    window.scrollTo(0, 0);
+    if (name === 'list') renderList();
+    if (name === 'add') setTimeout(() => $('#q-artist').focus(), 50);
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-go]');
+    if (b) go(b.dataset.go);
+  });
+
+  /* ---------- collection view ---------- */
+  let genreFilter = '';
+  let view = 'grid';
+  try { view = localStorage.getItem('crate.view') === 'list' ? 'list' : 'grid'; } catch(e){}
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => {
+    view = b.dataset.view; renderList();
+    try { localStorage.setItem('crate.view', view); } catch(e){}
+  }));
+  function renderList(){
+    const n = records.length;
+    $('#count').textContent = n ? String(n) : '';
+    $('#empty').classList.toggle('hidden', n > 0);
+    $('#list-controls').classList.toggle('hidden', n === 0);
+    $('#add-btn').classList.toggle('hidden', n === 0);
+    document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
+
+    // genre chips
+    const counts = {};
+    records.forEach(r => (r.genres || []).forEach(g => counts[g] = (counts[g] || 0) + 1));
+    const genres = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+    if (genreFilter && !counts[genreFilter]) genreFilter = '';
+    $('#genre-chips').innerHTML = genres.length < 2 ? '' :
+      `<button class="chip ${genreFilter ? '' : 'on'}" data-genre="">All</button>` +
+      genres.map(g => `<button class="chip ${g === genreFilter ? 'on' : ''}" data-genre="${esc(g)}">${esc(g)}<span class="n">${counts[g]}</span></button>`).join('');
+
+    const q = $('#search').value.trim().toLowerCase();
+    let list = records.filter(r => {
+      if (genreFilter && !(r.genres || []).includes(genreFilter)) return false;
+      if (!q) return true;
+      return [r.artist, r.album, r.label, r.catalogNo, year(r.date), ...(r.genres || [])].join(' ').toLowerCase().includes(q);
+    });
+    const sort = $('#sort').value;
+    const sortName = s => (s || '').toLowerCase().replace(/^the\s+/, '');
+    list.sort({
+      added: (a, b) => b.addedAt - a.addedAt,
+      artist: (a, b) => sortName(a.artist).localeCompare(sortName(b.artist)) || (a.date || '').localeCompare(b.date || ''),
+      album: (a, b) => sortName(a.album).localeCompare(sortName(b.album)),
+      year: (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || sortName(a.artist).localeCompare(sortName(b.artist)),
+    }[sort]);
+
+    $('#no-match').classList.toggle('hidden', !(n > 0 && list.length === 0));
+    const grid = $('#grid');
+    grid.className = view;
+    grid.innerHTML = view === 'list'
+      ? list.map(r => `
+      <button class="card row-item" data-id="${esc(r.id)}">
+        <div class="cover">${coverHTML(r.art)}</div>
+        <div style="min-width:0"><div class="t">${esc(r.album)}</div><div class="a">${esc(r.artist)}</div></div>
+        <div class="g">${esc((r.genres || []).slice(0, 2).join(', '))}</div>
+        <div class="y">${esc(year(r.date))}</div>
+      </button>`).join('')
+      : list.map(r => `
+      <button class="card" data-id="${esc(r.id)}">
+        <div class="cover">${coverHTML(r.art)}</div>
+        <div class="t" title="${esc(r.album)}">${esc(r.album)}</div>
+        <div class="a">${esc(r.artist)}${r.date ? ' · ' + esc(year(r.date)) : ''}</div>
+      </button>`).join('');
+  }
+  $('#search').addEventListener('input', renderList);
+  $('#sort').addEventListener('change', () => { renderList(); try { localStorage.setItem('crate.sort', $('#sort').value); } catch(e){} });
+  $('#genre-chips').addEventListener('click', e => {
+    const c = e.target.closest('[data-genre]'); if (!c) return;
+    genreFilter = c.dataset.genre; renderList();
+  });
+  $('#grid').addEventListener('click', e => {
+    const c = e.target.closest('.card'); if (c) showDetail(c.dataset.id);
+  });
+
+  /* ---------- detail ---------- */
+  function showDetail(id){
+    const r = records.find(x => x.id === id); if (!r) return go('list');
+    const rows = [
+      ['Released', r.date], ['Label', r.label], ['Catalog #', r.catalogNo], ['Country', r.country],
+      ['Tracks', r.tracks], ['Type', r.type], ['Format', r.format], ['Condition', r.condition],
+    ].filter(([, v]) => v);
+    const src = r.mbid
+      ? `<a href="https://musicbrainz.org/release-group/${esc(r.mbid)}" target="_blank" rel="noopener">View on MusicBrainz ↗</a>` : '';
+    $('#detail').innerHTML = `
+      <div class="detail">
+        <div class="cover">${coverHTML(r.art)}</div>
+        <div>
+          <h2>${esc(r.album)}</h2>
+          <div class="artist">${esc(r.artist)}</div>
+          ${(r.genres || []).length ? `<div class="genres">${r.genres.map(g => `<span class="chip">${esc(g)}</span>`).join('')}</div>` : ''}
+          ${rows.length ? `<dl class="info">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : ''}
+          ${r.notes ? `<div class="notes">${esc(r.notes)}</div>` : ''}
+          <div class="actions" style="justify-content:flex-start;margin-top:28px">
+            <button class="btn" id="d-edit">Edit</button>
+            <button class="btn btn-danger" id="d-delete">Remove</button>
+          </div>
+          ${src ? `<div class="src">${src}</div>` : ''}
+        </div>
+      </div>`;
+    $('#d-edit').onclick = () => openEdit(r, 'detail');
+    $('#d-delete').onclick = () => {
+      if (!confirm(`Remove “${r.album}” from your crate?`)) return;
+      records = records.filter(x => x.id !== r.id); save(); go('list'); toast('Removed');
+    };
+    go('detail');
+  }
+
+  /* ---------- lookup: MusicBrainz + Cover Art Archive + iTunes ---------- */
+  const MB = 'https://musicbrainz.org/ws/2/';
+  let mbNext = 0;
+  // MusicBrainz asks for at most ~1 request per second.
+  async function mb(path){
+    const wait = Math.max(0, mbNext - Date.now());
+    mbNext = Date.now() + wait + 1100;
+    if (wait) await sleep(wait);
+    const url = MB + path + (path.includes('?') ? '&' : '?') + 'fmt=json';
+    for (let attempt = 0; attempt < 2; attempt++){
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (res.ok) return res.json();
+      if (res.status === 503 && attempt === 0){ await sleep(1500); continue; }
+      throw new Error('MusicBrainz ' + res.status);
+    }
+  }
+  const lucene = s => s.replace(/([+\-&|!(){}\[\]^"~*?:\\\/])/g, '\\$1');
+
+  function itunes(term){
+    return new Promise(resolve => {
+      const cb = '__itunes_' + uid();
+      const s = document.createElement('script');
+      const done = data => { clearTimeout(timer); delete window[cb]; s.remove(); resolve((data && data.results) || []); };
+      const timer = setTimeout(() => done(null), 8000);
+      window[cb] = done;
+      s.onerror = () => done(null);
+      s.src = 'https://itunes.apple.com/search?entity=album&limit=15&term=' + encodeURIComponent(term) + '&callback=' + cb;
+      document.head.appendChild(s);
+    });
+  }
+  const itunesArt = r => r.artworkUrl100 ? r.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.') : '';
+  const caa = (id, size) => `https://coverartarchive.org/release-group/${id}/front-${size}`;
+
+  function matchItunes(list, artist, album){
+    const na = norm(artist), nb = norm(album);
+    return list.find(r => norm(r.collectionName) === nb && norm(r.artistName) === na)
+        || list.find(r => {
+             const c = norm(r.collectionName), a = norm(r.artistName);
+             return (c.startsWith(nb) || nb.startsWith(c)) && (a.includes(na) || na.includes(a));
+           });
+  }
+
+  let candidates = [];
+  let lookupSeq = 0;
+  $('#lookup-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const artist = $('#q-artist').value.trim(), album = $('#q-album').value.trim();
+    if (!artist || !album) return;
+    const seq = ++lookupSeq;
+    setStatus('Searching…', true);
+    $('#results').innerHTML = ''; $('#manual').classList.add('hidden');
+    $('#lookup-btn').disabled = true;
+
+    const q = `releasegroup:"${lucene(album)}" AND artist:"${lucene(artist)}"`;
+    const [mbRes, itRes] = await Promise.all([
+      mb('release-group/?limit=8&query=' + encodeURIComponent(q)).catch(err => ({ error: err })),
+      itunes(`${artist} ${album}`),
+    ]);
+    if (seq !== lookupSeq) return;
+    $('#lookup-btn').disabled = false;
+
+    candidates = [];
+    (mbRes['release-groups'] || [])
+      .filter(g => g.score >= 60)
+      .forEach(g => {
+        const credit = (g['artist-credit'] || []).map(c => c.name + (c.joinphrase || '')).join('') || artist;
+        const it = matchItunes(itRes, credit, g.title);
+        candidates.push({
+          source: 'mb', mbid: g.id, artist: credit, album: g.title,
+          date: g['first-release-date'] || '', type: [g['primary-type'], ...(g['secondary-types'] || [])].filter(Boolean).join(' · '),
+          releases: (g.releases || []).length, thumb: caa(g.id, 250), thumbFallback: it ? it.artworkUrl100 : '',
+          itunes: it || null,
+        });
+      });
+    // No MusicBrainz match? Fall back to iTunes results.
+    if (!candidates.length){
+      const na = norm(artist);
+      itRes.filter(r => { const a = norm(r.artistName); return a.includes(na) || na.includes(a); })
+        .slice(0, 6).forEach(r => candidates.push({
+          source: 'itunes', artist: r.artistName, album: r.collectionName,
+          date: (r.releaseDate || '').slice(0, 10), type: '', thumb: r.artworkUrl100, itunes: r,
+        }));
+    }
+
+    if (!candidates.length){
+      setStatus(mbRes.error && !itRes.length
+        ? 'Couldn’t reach the music databases. Check your connection, or enter it manually.'
+        : 'No matches found. Check the spelling, or enter it manually.', false, true);
+    } else {
+      setStatus(candidates.length === 1 ? 'Found it — tap to continue:' : 'Pick the right album:');
+    }
+    $('#results').innerHTML = candidates.map((c, i) => `
+      <button class="result" data-i="${i}">
+        <div class="cover">${coverHTML(c.thumb).replace('<img ', c.thumbFallback ? `<img data-fallback="${esc(c.thumbFallback)}" ` : '<img ')}</div>
+        <div class="meta">
+          <div class="t">${esc(c.album)}${c.type && c.type !== 'Album' ? `<span class="tag">${esc(c.type)}</span>` : ''}</div>
+          <div class="a">${esc(c.artist)}</div>
+          <div class="d">${esc(year(c.date) || 'Year unknown')}${c.releases > 1 ? ` · ${c.releases} releases` : ''}</div>
+        </div>
+        <span class="chev" aria-hidden="true">›</span>
+      </button>`).join('');
+    $('#manual').classList.remove('hidden');
+  });
+
+  function setStatus(msg, spin, err){
+    const s = $('#lookup-status');
+    s.classList.remove('hidden'); s.classList.toggle('err', !!err);
+    s.innerHTML = (spin ? '<div class="spinner"></div>' : '') + esc(msg);
+  }
+
+  $('#results').addEventListener('click', async e => {
+    const b = e.target.closest('.result'); if (!b) return;
+    const c = candidates[+b.dataset.i];
+    const seq = ++lookupSeq;
+    setStatus('Getting album details…', true);
+    const rec = await enrich(c);
+    if (seq !== lookupSeq) return;
+    $('#lookup-status').classList.add('hidden');
+    openEdit(rec, 'add', true);
+  });
+
+  $('#manual-btn').addEventListener('click', () => {
+    openEdit({ artist: $('#q-artist').value.trim(), album: $('#q-album').value.trim() }, 'add', true);
+  });
+
+  async function probe(url){
+    if (!url) return null;
+    return new Promise(res => {
+      const img = new Image(); const t = setTimeout(() => res(null), 8000);
+      img.onload = () => { clearTimeout(t); res(img.naturalWidth > 1 ? url : null); };
+      img.onerror = () => { clearTimeout(t); res(null); };
+      img.referrerPolicy = 'no-referrer';
+      img.src = url;
+    });
+  }
+
+  // Turn a search candidate into a full record: genres, label, tracks, artwork.
+  async function enrich(c){
+    const rec = { artist: c.artist, album: c.album, date: c.date, type: c.type, mbid: c.mbid || '', genres: [] };
+    const it = c.itunes;
+
+    if (c.source === 'mb'){
+      const artPromise = probe(caa(c.mbid, 500));
+      try {
+        const g = await mb(`release-group/${c.mbid}?inc=genres+tags+releases`);
+        const ranked = list => (list || []).filter(x => x.count > 0).sort((a, b) => b.count - a.count).map(x => titleCase(x.name));
+        rec.genres = ranked(g.genres).slice(0, 4);
+        if (!rec.genres.length) rec.genres = ranked(g.tags).slice(0, 3);
+
+        // Use the earliest official release for label / catalog / tracks.
+        const rel = (g.releases || [])
+          .filter(r => !r.status || r.status === 'Official')
+          .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))[0];
+        if (rel){
+          const r = await mb(`release/${rel.id}?inc=labels+media`);
+          const li = (r['label-info'] || []).find(l => l.label) || {};
+          rec.label = li.label ? li.label.name : '';
+          rec.catalogNo = li['catalog-number'] && li['catalog-number'] !== '[none]' ? li['catalog-number'] : '';
+          rec.country = r.country || '';
+          const tracks = (r.media || []).reduce((n, m) => n + (m['track-count'] || 0), 0);
+          rec.tracks = tracks ? String(tracks) : '';
+          if (!rec.date) rec.date = r.date || '';
+        }
+      } catch(err){ /* keep what we have; the user can fill in the rest */ }
+      rec.art = await artPromise;
+    }
+
+    if (it){
+      if (!rec.art) rec.art = await probe(itunesArt(it));
+      if (!rec.genres.length && it.primaryGenreName && it.primaryGenreName !== 'Music') rec.genres = [it.primaryGenreName];
+      if (!rec.date) rec.date = (it.releaseDate || '').slice(0, 10);
+      if (!rec.tracks && it.trackCount) rec.tracks = String(it.trackCount);
+      if (!rec.label && it.copyright) rec.label = it.copyright.replace(/^[℗©]\s*\d{4}\s*/, '').trim();
+    }
+    rec.art = rec.art || '';
+    return rec;
+  }
+
+  /* ---------- edit / review form ---------- */
+  let editing = null, editReturn = 'list';
+  const F = ['artist', 'album', 'date', 'label', 'catalogNo:cat', 'country', 'tracks', 'type', 'format', 'condition', 'notes', 'art'];
+  function openEdit(rec, from, isNew){
+    editing = { ...rec, isNew: !!isNew };
+    editReturn = from;
+    $('#edit-title').textContent = isNew ? 'Review & save' : 'Edit record';
+    F.forEach(f => { const [k, id] = f.split(':'); $('#f-' + (id || k)).value = rec[k] || ''; });
+    $('#f-genres').value = (rec.genres || []).join(', ');
+    updateEditCover();
+    const dupe = isNew && records.find(r => norm(r.artist) === norm(rec.artist) && norm(r.album) === norm(rec.album));
+    $('#dupe-warn').classList.toggle('hidden', !dupe);
+    if (dupe) $('#dupe-warn').textContent = 'You already have this album in your crate. Save again if it’s another copy.';
+    go('edit');
+  }
+  function updateEditCover(){ $('#edit-cover').innerHTML = coverHTML($('#f-art').value.trim()); }
+  $('#f-art').addEventListener('change', updateEditCover);
+  const leaveEdit = () => editReturn === 'detail' ? showDetail(editing.id) : go(editReturn);
+  $('#edit-back').onclick = leaveEdit;
+  $('#edit-cancel').onclick = leaveEdit;
+
+  $('#edit-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const rec = { ...editing };
+    F.forEach(f => { const [k, id] = f.split(':'); rec[k] = $('#f-' + (id || k)).value.trim(); });
+    rec.genres = [...new Set($('#f-genres').value.split(',').map(s => s.trim()).filter(Boolean))];
+    delete rec.isNew;
+    if (editing.isNew){
+      rec.id = uid(); rec.addedAt = Date.now();
+      records.push(rec); save();
+      $('#lookup-form').reset(); $('#results').innerHTML = '';
+      $('#lookup-status').classList.add('hidden'); $('#manual').classList.add('hidden');
+      toast('Added to your crate');
+      go('list');
+    } else {
+      const i = records.findIndex(r => r.id === rec.id);
+      if (i >= 0) records[i] = rec;
+      save(); toast('Saved'); showDetail(rec.id);
+    }
+  });
+
+  /* ---------- backup / restore ---------- */
+  function download(name, text, type){
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  const stamp = () => new Date().toISOString().slice(0, 10);
+  $('#settings-btn').onclick = () => go('settings');
+  $('#export-btn').onclick = () => download(`crate-backup-${stamp()}.json`, JSON.stringify({ app: 'crate', version: 1, records }, null, 2), 'application/json');
+  $('#export-csv-btn').onclick = () => {
+    const cols = ['artist', 'album', 'date', 'genres', 'label', 'catalogNo', 'country', 'tracks', 'type', 'format', 'condition', 'notes'];
+    const cell = v => `"${String(Array.isArray(v) ? v.join('; ') : v ?? '').replace(/"/g, '""')}"`;
+    download(`crate-${stamp()}.csv`, [cols.join(','), ...records.map(r => cols.map(c => cell(r[c])).join(','))].join('\n'), 'text/csv');
+  };
+  $('#import-btn').onclick = () => $('#import-file').click();
+  $('#import-file').addEventListener('change', async e => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const incoming = Array.isArray(data) ? data : data.records;
+      if (!Array.isArray(incoming)) throw new Error('bad file');
+      const valid = incoming.filter(r => r && r.artist && r.album).map(r => ({ id: r.id || uid(), addedAt: r.addedAt || Date.now(), genres: [], ...r }));
+      if (!confirm(`Replace your crate (${records.length} records) with this backup (${valid.length} records)?`)) return;
+      records = valid; save(); toast('Restored'); go('list');
+    } catch(err){ toast('That file isn’t a Crate backup'); }
+  });
+
+  /* ---------- init ---------- */
+  load();
+  try { const s = localStorage.getItem('crate.sort'); if (s) $('#sort').value = s; } catch(e){}
+  renderList();
+})();
+</script>
+</body>
+</html>
