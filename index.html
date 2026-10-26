@@ -190,8 +190,49 @@
   details summary{ cursor:pointer; color:var(--muted); font-size:13px; font-weight:500; margin:4px 0 12px; }
   .settings-copy{ font-size:14px; color:var(--muted); margin-bottom:20px; max-width:480px; }
 
+  /* add: scan entry */
+  .scan-cta{ display:flex; align-items:center; gap:14px; width:100%; padding:14px 16px; border-radius:14px; border:1px solid var(--line);
+    background:var(--panel); cursor:pointer; text-align:left; transition:border-color .15s; }
+  .scan-cta:hover{ border-color:var(--muted); }
+  .scan-cta .ico{ width:44px; height:44px; flex:none; border-radius:12px; background:var(--primary); color:var(--on-primary);
+    display:flex; align-items:center; justify-content:center; }
+  .scan-cta .ico svg{ width:22px; height:22px; }
+  .scan-cta b{ display:block; font-weight:600; }
+  .scan-cta span{ color:var(--muted); font-size:13px; }
+  .scan-cta .chev{ margin-left:auto; color:var(--faint); font-size:20px; }
+  .barcode-row{ display:flex; gap:8px; margin-top:12px; }
+  .barcode-row input{ flex:1; min-width:0; font-variant-numeric:tabular-nums; letter-spacing:.02em; }
+  .divider{ display:flex; align-items:center; gap:12px; color:var(--faint); font-size:13px; margin:28px 0 20px; }
+  .divider::before,.divider::after{ content:''; flex:1; height:1px; background:var(--line); }
+
+  /* scanner overlay — always dark, whatever the theme */
+  .scanner{ position:fixed; inset:0; z-index:30; background:#000; color:#fff; overflow:hidden; }
+  .scanner video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .scan-frame{ position:absolute; left:50%; top:44%; width:min(82vw,440px); aspect-ratio:16/9; transform:translate(-50%,-50%);
+    border-radius:18px; box-shadow:0 0 0 100vmax rgba(0,0,0,.5); border:2px solid rgba(255,255,255,.85); }
+  .scan-frame::after{ content:''; position:absolute; left:8%; right:8%; top:50%; height:2px; border-radius:2px;
+    background:var(--accent); box-shadow:0 0 12px var(--accent); animation:sweep 1.8s ease-in-out infinite alternate; }
+  @keyframes sweep{ from{ transform:translateY(-38px); } to{ transform:translateY(38px); } }
+  .scanner.found .scan-frame{ border-color:#4ADE80; }
+  .scanner.found .scan-frame::after{ display:none; }
+  .scanner.idle .scan-frame{ display:none; }
+  .scan-top{ position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; padding:max(14px, env(safe-area-inset-top)) 14px 14px; }
+  .scan-bottom{ position:absolute; left:0; right:0; bottom:0; padding:20px 16px max(24px, env(safe-area-inset-bottom)); text-align:center;
+    background:linear-gradient(transparent, rgba(0,0,0,.6) 30%); }
+  .scan-hint{ font-size:15px; font-weight:500; margin-bottom:16px; min-height:22px; }
+  .scan-hint.err{ color:#FCA5A5; }
+  .scan-actions{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .scanner .btn,.scanner .round{ color:#fff; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.35);
+    -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); }
+  .scanner .btn:hover{ background:rgba(255,255,255,.12); }
+  .scanner .round{ width:42px; height:42px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; }
+  .scanner .round svg{ width:20px; height:20px; }
+  .scanner .round.on{ background:#fff; color:#000; }
+  .scanner .file-btn{ position:relative; overflow:hidden; display:inline-flex; align-items:center; }
+  .scanner .file-btn input{ position:absolute; inset:0; opacity:0; cursor:pointer; }
+
   .toast{ position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(12px); opacity:0; pointer-events:none;
-    background:var(--primary); color:var(--on-primary); padding:9px 16px; border-radius:999px; font-weight:500; font-size:14px; transition:.2s; z-index:20; }
+    background:var(--primary); color:var(--on-primary); padding:9px 16px; border-radius:999px; font-weight:500; font-size:14px; transition:.2s; z-index:40; }
   .toast.show{ opacity:1; transform:translateX(-50%); }
   .hidden{ display:none !important; }
 </style>
@@ -206,6 +247,9 @@
       <div class="top-actions">
         <button class="icon-btn" id="settings-btn" title="Back up &amp; restore" aria-label="Back up and restore">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
+        </button>
+        <button class="icon-btn" id="scan-quick" title="Scan a barcode" aria-label="Scan a barcode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>
         </button>
         <button class="btn btn-primary" id="add-btn" data-go="add">Add record</button>
       </div>
@@ -247,14 +291,26 @@
   <section class="pane narrow" id="pane-add">
     <button class="back" data-go="list">← Crate</button>
     <h2 class="page-title">Add a record</h2>
+    <button type="button" class="scan-cta" id="scan-btn">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16M8 8v8M11 8v8M14 8v8M17 8v8"/></svg></div>
+      <div><b>Scan barcode</b><span>Finds your exact pressing</span></div>
+      <span class="chev" aria-hidden="true">›</span>
+    </button>
+    <form class="barcode-row" id="barcode-form" autocomplete="off">
+      <input type="text" id="q-barcode" inputmode="numeric" placeholder="Or type the barcode number" aria-label="Barcode number">
+      <button class="btn" type="submit">Look up</button>
+    </form>
+    <div class="divider">or search by name</div>
     <form class="panel" id="lookup-form" autocomplete="off">
       <div class="field"><label for="q-artist">Artist or band</label><input type="text" id="q-artist" required placeholder="e.g. Fleetwood Mac"></div>
       <div class="field"><label for="q-album">Album</label><input type="text" id="q-album" required placeholder="e.g. Rumours"></div>
       <div class="actions" style="justify-content:flex-start;margin-top:8px"><button class="btn btn-primary" type="submit" id="lookup-btn">Find album</button></div>
     </form>
-    <div class="status hidden" id="lookup-status"></div>
-    <div class="results" id="results"></div>
-    <div class="manual hidden" id="manual">Not listed? <button type="button" id="manual-btn">Enter it manually</button></div>
+    <div id="lookup-out">
+      <div class="status hidden" id="lookup-status"></div>
+      <div class="results" id="results"></div>
+      <div class="manual hidden" id="manual">Not listed? <button type="button" id="manual-btn">Enter it manually</button></div>
+    </div>
   </section>
 
   <!-- Add/Edit: review form -->
@@ -294,7 +350,11 @@
             <option>Very Good (VG)</option><option>Good (G)</option><option>Fair / Poor</option>
           </select></div>
       </div>
-      <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" placeholder="Pressing, colour, where you bought it…"></textarea></div>
+      <div class="row">
+        <div class="field"><label for="f-pressed">Pressed</label><input type="text" id="f-pressed" placeholder="Year of this pressing"></div>
+        <div class="field"><label for="f-barcode">Barcode</label><input type="text" id="f-barcode" inputmode="numeric"></div>
+      </div>
+      <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" placeholder="Colour, where you bought it…"></textarea></div>
       <details>
         <summary>Cover image</summary>
         <div class="field"><label for="f-art">Image URL</label><input type="url" id="f-art" placeholder="https://…"></div>
@@ -330,6 +390,27 @@
 
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- Barcode scanner -->
+<div class="scanner hidden" id="scanner" role="dialog" aria-label="Scan barcode">
+  <video id="scan-video" playsinline muted></video>
+  <div class="scan-frame"></div>
+  <div class="scan-top">
+    <button class="round" id="scan-close" aria-label="Close scanner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <button class="round hidden" id="scan-torch" aria-label="Flashlight" title="Flashlight">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 2 5 13h6l-1 9 8-11h-6l1-9Z"/></svg>
+    </button>
+  </div>
+  <div class="scan-bottom">
+    <div class="scan-hint" id="scan-hint">Point at the barcode on the back of the sleeve</div>
+    <div class="scan-actions">
+      <label class="btn file-btn">Use a photo<input type="file" id="scan-photo" accept="image/*" capture="environment"></label>
+      <button class="btn" id="scan-type">Type the number</button>
+    </div>
+  </div>
+</div>
 
 <script>
 (() => {
@@ -422,7 +503,7 @@
     let list = records.filter(r => {
       if (genreFilter && !(r.genres || []).includes(genreFilter)) return false;
       if (!q) return true;
-      return [r.artist, r.album, r.label, r.catalogNo, year(r.date), ...(r.genres || [])].join(' ').toLowerCase().includes(q);
+      return [r.artist, r.album, r.label, r.catalogNo, r.barcode, year(r.date), ...(r.genres || [])].join(' ').toLowerCase().includes(q);
     });
     const sort = $('#sort').value;
     const sortName = s => (s || '').toLowerCase().replace(/^the\s+/, '');
@@ -467,9 +548,11 @@
     const rows = [
       ['Released', r.date], ['Label', r.label], ['Catalog #', r.catalogNo], ['Country', r.country],
       ['Tracks', r.tracks], ['Type', r.type], ['Format', r.format], ['Condition', r.condition],
+      ['Pressed', year(r.pressed) !== year(r.date) ? r.pressed : ''], ['Barcode', r.barcode],
     ].filter(([, v]) => v);
-    const src = r.mbid
-      ? `<a href="https://musicbrainz.org/release-group/${esc(r.mbid)}" target="_blank" rel="noopener">View on MusicBrainz ↗</a>` : '';
+    const mbPath = r.releaseId ? 'release/' + r.releaseId : r.mbid ? 'release-group/' + r.mbid : '';
+    const src = mbPath
+      ? `<a href="https://musicbrainz.org/${esc(mbPath)}" target="_blank" rel="noopener">View on MusicBrainz ↗</a>` : '';
     $('#detail').innerHTML = `
       <div class="detail">
         <div class="cover">${coverHTML(r.art)}</div>
@@ -513,6 +596,9 @@
   const lucene = s => s.replace(/([+\-&|!(){}\[\]^"~*?:\\\/])/g, '\\$1');
 
   function itunes(term){
+    return jsonp('https://itunes.apple.com/search?entity=album&limit=15&term=' + encodeURIComponent(term));
+  }
+  function jsonp(url){
     return new Promise(resolve => {
       const cb = '__itunes_' + uid();
       const s = document.createElement('script');
@@ -520,12 +606,31 @@
       const timer = setTimeout(() => done(null), 8000);
       window[cb] = done;
       s.onerror = () => done(null);
-      s.src = 'https://itunes.apple.com/search?entity=album&limit=15&term=' + encodeURIComponent(term) + '&callback=' + cb;
+      s.src = url + '&callback=' + cb;
       document.head.appendChild(s);
     });
   }
   const itunesArt = r => r.artworkUrl100 ? r.artworkUrl100.replace(/\/\d+x\d+bb\./, '/600x600bb.') : '';
   const caa = (id, size) => `https://coverartarchive.org/release-group/${id}/front-${size}`;
+  const caaRelease = (id, size) => `https://coverartarchive.org/release/${id}/front-${size}`;
+  const artistCredit = ac => (ac || []).map(c => c.name + (c.joinphrase || '')).join('');
+  const groupType = g => [g['primary-type'], ...(g['secondary-types'] || [])].filter(Boolean).join(' · ');
+  const ranked = list => (list || []).filter(x => x.count > 0).sort((a, b) => b.count - a.count).map(x => titleCase(x.name));
+  const rankGenres = g => { const r = ranked(g.genres).slice(0, 4); return r.length ? r : ranked(g.tags).slice(0, 3); };
+  function labelInfo(rel){
+    const li = (rel['label-info'] || []).find(l => l.label) || {};
+    const cat = li['catalog-number'];
+    return { label: li.label ? li.label.name : '', catalogNo: cat && cat !== '[none]' ? cat : '' };
+  }
+  // Map MusicBrainz media (e.g. two '12" Vinyl' discs) onto the format menu.
+  function vinylFormat(media){
+    const vinyl = (media || []).filter(m => /vinyl/i.test(m.format || ''));
+    if (!vinyl.length) return '';
+    const f = vinyl[0].format;
+    if (/7"/.test(f)) return '7″';
+    if (/10"/.test(f)) return '10″';
+    return ['', 'LP', '2×LP', '3×LP'][vinyl.length] || 'Box set';
+  }
 
   function matchItunes(list, artist, album){
     const na = norm(artist), nb = norm(album);
@@ -543,6 +648,7 @@
     const artist = $('#q-artist').value.trim(), album = $('#q-album').value.trim();
     if (!artist || !album) return;
     const seq = ++lookupSeq;
+    $('#lookup-form').after($('#lookup-out'));
     setStatus('Searching…', true);
     $('#results').innerHTML = ''; $('#manual').classList.add('hidden');
     $('#lookup-btn').disabled = true;
@@ -559,11 +665,11 @@
     (mbRes['release-groups'] || [])
       .filter(g => g.score >= 60)
       .forEach(g => {
-        const credit = (g['artist-credit'] || []).map(c => c.name + (c.joinphrase || '')).join('') || artist;
+        const credit = artistCredit(g['artist-credit']) || artist;
         const it = matchItunes(itRes, credit, g.title);
         candidates.push({
           source: 'mb', mbid: g.id, artist: credit, album: g.title,
-          date: g['first-release-date'] || '', type: [g['primary-type'], ...(g['secondary-types'] || [])].filter(Boolean).join(' · '),
+          date: g['first-release-date'] || '', type: groupType(g),
           releases: (g.releases || []).length, thumb: caa(g.id, 250), thumbFallback: it ? it.artworkUrl100 : '',
           itunes: it || null,
         });
@@ -585,39 +691,222 @@
     } else {
       setStatus(candidates.length === 1 ? 'Found it — tap to continue:' : 'Pick the right album:');
     }
+    renderCandidates();
+  });
+
+  function renderCandidates(){
     $('#results').innerHTML = candidates.map((c, i) => `
       <button class="result" data-i="${i}">
         <div class="cover">${coverHTML(c.thumb).replace('<img ', c.thumbFallback ? `<img data-fallback="${esc(c.thumbFallback)}" ` : '<img ')}</div>
         <div class="meta">
           <div class="t">${esc(c.album)}${c.type && c.type !== 'Album' ? `<span class="tag">${esc(c.type)}</span>` : ''}</div>
           <div class="a">${esc(c.artist)}</div>
-          <div class="d">${esc(year(c.date) || 'Year unknown')}${c.releases > 1 ? ` · ${c.releases} releases` : ''}</div>
+          <div class="d">${esc(c.detail || (year(c.date) || 'Year unknown') + (c.releases > 1 ? ` · ${c.releases} releases` : ''))}</div>
         </div>
         <span class="chev" aria-hidden="true">›</span>
       </button>`).join('');
     $('#manual').classList.remove('hidden');
-  });
+  }
 
   function setStatus(msg, spin, err){
     const s = $('#lookup-status');
     s.classList.remove('hidden'); s.classList.toggle('err', !!err);
     s.innerHTML = (spin ? '<div class="spinner"></div>' : '') + esc(msg);
+    s.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   $('#results').addEventListener('click', async e => {
     const b = e.target.closest('.result'); if (!b) return;
-    const c = candidates[+b.dataset.i];
+    choose(candidates[+b.dataset.i]);
+  });
+  async function choose(c){
     const seq = ++lookupSeq;
     setStatus('Getting album details…', true);
     const rec = await enrich(c);
     if (seq !== lookupSeq) return;
     $('#lookup-status').classList.add('hidden');
     openEdit(rec, 'add', true);
-  });
+  }
 
   $('#manual-btn').addEventListener('click', () => {
-    openEdit({ artist: $('#q-artist').value.trim(), album: $('#q-album').value.trim() }, 'add', true);
+    openEdit({ artist: $('#q-artist').value.trim(), album: $('#q-album').value.trim(),
+               barcode: $('#q-barcode').value.replace(/\D/g, '') }, 'add', true);
   });
+
+  /* ---------- barcode lookup ---------- */
+  $('#barcode-form').addEventListener('submit', e => { e.preventDefault(); lookupBarcode($('#q-barcode').value); });
+
+  async function lookupBarcode(raw){
+    const code = String(raw).replace(/\D/g, '');
+    $('#q-barcode').value = code;
+    $('#barcode-form').after($('#lookup-out'));
+    $('#results').innerHTML = ''; $('#manual').classList.add('hidden');
+    if (code.length < 8 || code.length > 14) return setStatus('That doesn’t look like a barcode — it should be 8 to 14 digits.', false, true);
+    // UPC-A (12 digits) and EAN-13 are the same code with a leading 0, and sleeves get catalogued either way.
+    const variants = new Set([code]);
+    if (code.length === 12) variants.add('0' + code);
+    if (code.length === 13 && code[0] === '0') variants.add(code.slice(1));
+    const seq = ++lookupSeq;
+    setStatus(`Looking up ${code}…`, true);
+
+    const q = [...variants].map(v => 'barcode:' + v).join(' OR ');
+    const res = await mb('release/?limit=15&query=' + encodeURIComponent(q)).catch(err => ({ error: err }));
+    if (seq !== lookupSeq) return;
+
+    candidates = (res.releases || [])
+      .filter(r => variants.has((r.barcode || '').replace(/\D/g, '')))
+      .map(r => {
+        const g = r['release-group'] || {};
+        const fmt = vinylFormat(r.media);
+        const media = (r.media || []).map(m => m.format).filter(Boolean);
+        const tracks = (r.media || []).reduce((n, m) => n + (m['track-count'] || 0), 0);
+        const { label, catalogNo } = labelInfo(r);
+        return {
+          source: 'release', releaseId: r.id, mbid: g.id, artist: artistCredit(r['artist-credit']), album: r.title,
+          date: r.date || '', country: r.country || '', label, catalogNo, format: fmt, barcode: code,
+          tracks: tracks ? String(tracks) : '', type: groupType(g), isVinyl: !!fmt,
+          thumb: caaRelease(r.id, 250), thumbFallback: g.id ? caa(g.id, 250) : '',
+          detail: [year(r.date), r.country, label, media.length ? (media.length > 1 ? media.length + '× ' : '') + media[0] : ''].filter(Boolean).join(' · '),
+        };
+      })
+      .sort((a, b) => b.isVinyl - a.isVinyl);
+
+    // Not in MusicBrainz? iTunes knows the UPCs of many digital releases.
+    if (!candidates.length){
+      const it = await jsonp('https://itunes.apple.com/lookup?entity=album&upc=' + code);
+      if (seq !== lookupSeq) return;
+      it.filter(r => r.collectionName).slice(0, 3).forEach(r => candidates.push({
+        source: 'itunes', artist: r.artistName, album: r.collectionName, barcode: code,
+        date: (r.releaseDate || '').slice(0, 10), type: '', thumb: r.artworkUrl100, itunes: r,
+      }));
+    }
+
+    if (!candidates.length){
+      setStatus(res.error
+        ? 'Couldn’t reach MusicBrainz. Check your connection and try again.'
+        : `No match for ${code}. Search by artist and album below — the barcode will be saved with it.`, false, true);
+      $('#manual').classList.remove('hidden');
+      return;
+    }
+    // A single vinyl match: go straight to the review form.
+    if (candidates.length === 1 || (candidates[0].isVinyl && !candidates[1].isVinyl)) return choose(candidates[0]);
+    setStatus('This barcode matches several releases — pick yours:');
+    renderCandidates();
+  }
+
+  /* ---------- camera scanner ---------- */
+  const SCAN_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e'];
+  const POLYFILL = 'https://cdn.jsdelivr.net/npm/barcode-detector@3.2.2/dist/iife/ponyfill.js';
+  const POLYFILL_SRI = 'sha384-KJVUIUGb4pmfpWXfD8j3y9ARn6KoGC2vPC/wNUX1O1ZkYemh0BsuvsmdEU2+wS7O';
+  let detectorPromise = null;
+  // Native BarcodeDetector where the browser has it (Chrome on Android); otherwise a ZXing-based polyfill.
+  function getDetector(){
+    if (!detectorPromise) detectorPromise = (async () => {
+      if ('BarcodeDetector' in window){
+        try {
+          const supported = await BarcodeDetector.getSupportedFormats();
+          const formats = SCAN_FORMATS.filter(f => supported.includes(f));
+          if (formats.length) return new BarcodeDetector({ formats });
+        } catch(e){}
+      }
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = POLYFILL; s.integrity = POLYFILL_SRI; s.crossOrigin = 'anonymous';
+        s.onload = resolve; s.onerror = () => reject(new Error('scanner failed to load'));
+        document.head.appendChild(s);
+      });
+      return new window.BarcodeDetectionAPI.BarcodeDetector({ formats: SCAN_FORMATS });
+    })().catch(err => { detectorPromise = null; throw err; });
+    return detectorPromise;
+  }
+  const findCode = codes => (codes || []).map(c => c.rawValue).find(v => /^\d{8,14}$/.test(v));
+
+  let stream = null, scanning = false, scanTimer = 0, torchOn = false;
+  function scanHint(msg, err){ const h = $('#scan-hint'); h.textContent = msg; h.classList.toggle('err', !!err); }
+
+  async function openScanner(){
+    const sc = $('#scanner');
+    sc.classList.remove('hidden', 'found'); sc.classList.add('idle');
+    $('#scan-torch').classList.add('hidden');
+    scanHint('Starting camera…');
+    if (current !== 'add') go('add');
+    let detector;
+    try { detector = await getDetector(); }
+    catch(e){ return scanHint('The scanner couldn’t load. Check your connection, or type the number instead.', true); }
+    if (sc.classList.contains('hidden')) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+      return scanHint('This browser can’t use the camera here. Use a photo or type the number.', true);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+    } catch(e){
+      return scanHint(e.name === 'NotAllowedError'
+        ? 'Camera access was blocked. Allow it in your browser settings, or use a photo instead.'
+        : 'No camera found. Use a photo or type the number.', true);
+    }
+    if (sc.classList.contains('hidden')) return stopCamera();
+    const video = $('#scan-video');
+    video.srcObject = stream;
+    try { await video.play(); } catch(e){}
+    sc.classList.remove('idle');
+    scanHint('Point at the barcode on the back of the sleeve');
+    const track = stream.getVideoTracks()[0];
+    const caps = track && track.getCapabilities ? track.getCapabilities() : {};
+    $('#scan-torch').classList.toggle('hidden', !caps.torch);
+
+    scanning = true;
+    const tick = async () => {
+      if (!scanning) return;
+      if (video.readyState >= 2){
+        try {
+          const code = findCode(await detector.detect(video));
+          if (code && scanning) return found(code);
+        } catch(e){}
+      }
+      scanTimer = setTimeout(tick, 120);
+    };
+    tick();
+  }
+  function stopCamera(){
+    scanning = false; clearTimeout(scanTimer); torchOn = false;
+    $('#scan-torch').classList.remove('on');
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null; $('#scan-video').srcObject = null;
+  }
+  function closeScanner(){ stopCamera(); $('#scanner').classList.add('hidden'); }
+  function found(code){
+    if ($('#scanner').classList.contains('found')) return;
+    scanning = false;
+    $('#scanner').classList.add('found');
+    if (navigator.vibrate) navigator.vibrate(60);
+    scanHint(code);
+    setTimeout(() => { closeScanner(); lookupBarcode(code); }, 350);
+  }
+
+  $('#scan-btn').onclick = openScanner;
+  $('#scan-quick').onclick = openScanner;
+  $('#scan-close').onclick = closeScanner;
+  $('#scan-type').onclick = () => { closeScanner(); $('#q-barcode').focus(); };
+  $('#scan-torch').onclick = async () => {
+    const track = stream && stream.getVideoTracks()[0]; if (!track) return;
+    try { await track.applyConstraints({ advanced: [{ torch: !torchOn }] }); torchOn = !torchOn; } catch(e){}
+    $('#scan-torch').classList.toggle('on', torchOn);
+  };
+  $('#scan-photo').addEventListener('change', async e => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    scanHint('Reading photo…');
+    try {
+      const detector = await getDetector();
+      const bitmap = await createImageBitmap(file);
+      const code = findCode(await detector.detect(bitmap));
+      if (code) return found(code);
+      scanHint('No barcode found in that photo. Try again closer up, with the barcode in focus.', true);
+    } catch(err){ scanHint('Couldn’t read that photo. Try another, or type the number.', true); }
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#scanner').classList.contains('hidden')) closeScanner(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && !$('#scanner').classList.contains('hidden')) closeScanner(); });
 
   async function probe(url){
     if (!url) return null;
@@ -633,15 +922,30 @@
   // Turn a search candidate into a full record: genres, label, tracks, artwork.
   async function enrich(c){
     const rec = { artist: c.artist, album: c.album, date: c.date, type: c.type, mbid: c.mbid || '', genres: [] };
-    const it = c.itunes;
+
+    if (c.barcode) rec.barcode = c.barcode;
+
+    if (c.source === 'release'){
+      // Barcode match: this is the exact pressing, so its label/catalog/format are the user's copy.
+      Object.assign(rec, { releaseId: c.releaseId, label: c.label, catalogNo: c.catalogNo, country: c.country,
+                           tracks: c.tracks, format: c.format, pressed: c.date });
+      const artPromise = probe(caaRelease(c.releaseId, 500)).then(u => u || (c.mbid ? probe(caa(c.mbid, 500)) : null));
+      if (c.mbid){
+        try {
+          const g = await mb(`release-group/${c.mbid}?inc=genres+tags`);
+          rec.genres = rankGenres(g);
+          if (g['first-release-date']) rec.date = g['first-release-date'];
+        } catch(err){}
+      }
+      rec.art = await artPromise;
+      if (!rec.art || !rec.genres.length) c.itunes = matchItunes(await itunes(`${c.artist} ${c.album}`), c.artist, c.album);
+    }
 
     if (c.source === 'mb'){
       const artPromise = probe(caa(c.mbid, 500));
       try {
         const g = await mb(`release-group/${c.mbid}?inc=genres+tags+releases`);
-        const ranked = list => (list || []).filter(x => x.count > 0).sort((a, b) => b.count - a.count).map(x => titleCase(x.name));
-        rec.genres = ranked(g.genres).slice(0, 4);
-        if (!rec.genres.length) rec.genres = ranked(g.tags).slice(0, 3);
+        rec.genres = rankGenres(g);
 
         // Use the earliest official release for label / catalog / tracks.
         const rel = (g.releases || [])
@@ -649,9 +953,7 @@
           .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999'))[0];
         if (rel){
           const r = await mb(`release/${rel.id}?inc=labels+media`);
-          const li = (r['label-info'] || []).find(l => l.label) || {};
-          rec.label = li.label ? li.label.name : '';
-          rec.catalogNo = li['catalog-number'] && li['catalog-number'] !== '[none]' ? li['catalog-number'] : '';
+          Object.assign(rec, labelInfo(r));
           rec.country = r.country || '';
           const tracks = (r.media || []).reduce((n, m) => n + (m['track-count'] || 0), 0);
           rec.tracks = tracks ? String(tracks) : '';
@@ -661,6 +963,7 @@
       rec.art = await artPromise;
     }
 
+    const it = c.itunes;
     if (it){
       if (!rec.art) rec.art = await probe(itunesArt(it));
       if (!rec.genres.length && it.primaryGenreName && it.primaryGenreName !== 'Music') rec.genres = [it.primaryGenreName];
@@ -674,7 +977,7 @@
 
   /* ---------- edit / review form ---------- */
   let editing = null, editReturn = 'list';
-  const F = ['artist', 'album', 'date', 'label', 'catalogNo:cat', 'country', 'tracks', 'type', 'format', 'condition', 'notes', 'art'];
+  const F = ['artist', 'album', 'date', 'label', 'catalogNo:cat', 'country', 'tracks', 'type', 'format', 'condition', 'pressed', 'barcode', 'notes', 'art'];
   function openEdit(rec, from, isNew){
     editing = { ...rec, isNew: !!isNew };
     editReturn = from;
@@ -682,9 +985,12 @@
     F.forEach(f => { const [k, id] = f.split(':'); $('#f-' + (id || k)).value = rec[k] || ''; });
     $('#f-genres').value = (rec.genres || []).join(', ');
     updateEditCover();
-    const dupe = isNew && records.find(r => norm(r.artist) === norm(rec.artist) && norm(r.album) === norm(rec.album));
+    const samePressing = isNew && rec.barcode && records.find(r => r.barcode === rec.barcode);
+    const dupe = samePressing || (isNew && records.find(r => norm(r.artist) === norm(rec.artist) && norm(r.album) === norm(rec.album)));
     $('#dupe-warn').classList.toggle('hidden', !dupe);
-    if (dupe) $('#dupe-warn').textContent = 'You already have this album in your crate. Save again if it’s another copy.';
+    if (dupe) $('#dupe-warn').textContent = samePressing
+      ? 'You already have this exact pressing in your crate. Save again if it’s another copy.'
+      : 'You already have this album in your crate. Save again if it’s another copy.';
     go('edit');
   }
   function updateEditCover(){ $('#edit-cover').innerHTML = coverHTML($('#f-art').value.trim()); }
@@ -702,7 +1008,7 @@
     if (editing.isNew){
       rec.id = uid(); rec.addedAt = Date.now();
       records.push(rec); save();
-      $('#lookup-form').reset(); $('#results').innerHTML = '';
+      $('#lookup-form').reset(); $('#barcode-form').reset(); $('#results').innerHTML = '';
       $('#lookup-status').classList.add('hidden'); $('#manual').classList.add('hidden');
       toast('Added to your crate');
       go('list');
@@ -724,7 +1030,7 @@
   $('#settings-btn').onclick = () => go('settings');
   $('#export-btn').onclick = () => download(`crate-backup-${stamp()}.json`, JSON.stringify({ app: 'crate', version: 1, records }, null, 2), 'application/json');
   $('#export-csv-btn').onclick = () => {
-    const cols = ['artist', 'album', 'date', 'genres', 'label', 'catalogNo', 'country', 'tracks', 'type', 'format', 'condition', 'notes'];
+    const cols = ['artist', 'album', 'date', 'genres', 'label', 'catalogNo', 'country', 'tracks', 'type', 'format', 'condition', 'pressed', 'barcode', 'notes'];
     const cell = v => `"${String(Array.isArray(v) ? v.join('; ') : v ?? '').replace(/"/g, '""')}"`;
     download(`crate-${stamp()}.csv`, [cols.join(','), ...records.map(r => cols.map(c => cell(r[c])).join(','))].join('\n'), 'text/csv');
   };
