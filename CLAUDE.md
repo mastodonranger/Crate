@@ -18,8 +18,9 @@ older version saved looks to the user exactly like a deleted catalog. So:
   and recovers from the automatic copy; if it can't, `storageLocked` blocks every write. Keep it that way.
 - **Backup files** (`{ app, version, exportedAt, settings, records }`) must stay restorable forever.
   If the format changes, bump `SCHEMA` and keep reading older files.
-- **Don't change the hosting address** (repo name / Pages URL / custom domain) without warning: storage
-  belongs to the origin, so a new address starts with an empty crate. Users would need to back up first.
+- **Don't change the site's domain** (adding a custom domain, or a GitHub username change) without warning:
+  storage belongs to the origin (`mastodonranger.github.io`), so a new domain starts with an empty crate
+  and users would need to back up first. Renaming the repo keeps the same origin, so data survives that.
 
 ## Checking a change
 
