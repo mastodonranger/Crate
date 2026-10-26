@@ -13,10 +13,16 @@ Catalog your vinyl. Type in the artist and album, and Crate finds the cover art,
 - Track your own copy: format (LP, 2×LP, 7″…), condition grade and notes
 - Covers or list view, search, sort and genre filters
 - Light and dark mode, works on phone and desktop
-- Backup and restore (JSON) and CSV export
+- Backup reminders, backup to iCloud/Drive/email from your phone, restore, an automatic daily copy, and CSV export
 
 ## Running it
 
 It's a single HTML file with no build step and no API keys. The camera scanner needs the page served over HTTPS (GitHub Pages is fine); on browsers without a built-in barcode reader, such as Safari, it loads the [barcode-detector](https://github.com/Sec-ant/barcode-detector) polyfill on first use. Open `index.html` in a browser, or host it with GitHub Pages (Settings → Pages → Deploy from branch → `main` / root).
 
-Your collection is saved in your browser's local storage, so it lives on that one device. Use **⋯ → Download backup** to keep a copy or move it to another device.
+## Keeping your catalog safe
+
+Your collection is saved in your browser on that one device. Updating the app never deletes it — but clearing your browser data, or losing the device, would. So:
+
+- **Back up regularly**: Settings → **Back up now**. On a phone this opens the share sheet, so you can save the file to iCloud Drive, Google Drive or Files, or email it to yourself. The app reminds you when you have unsaved changes. A backup holds every detail of every record, and **Restore from backup** brings it all back on any device.
+- **On iPhone, add Crate to your Home Screen** (Share → Add to Home Screen). Safari can clear a website's saved data after 7 days without a visit; apps on the Home Screen are exempt.
+- The app also keeps an **automatic daily copy** you can restore from Settings, and if the saved data is ever damaged it recovers from that copy instead of starting empty.

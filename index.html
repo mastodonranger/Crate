@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Crate</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Crate">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -205,6 +212,17 @@
   .divider{ display:flex; align-items:center; gap:12px; color:var(--faint); font-size:13px; margin:28px 0 20px; }
   .divider::before,.divider::after{ content:''; flex:1; height:1px; background:var(--line); }
 
+  /* backup reminder / storage warnings */
+  .nudge{ display:flex; align-items:center; gap:12px; padding:12px 12px 12px 16px; border-radius:14px; background:var(--fill); margin-bottom:24px; }
+  .nudge > div{ flex:1; min-width:0; font-size:14px; }
+  .nudge b{ display:block; font-weight:600; }
+  .nudge span{ color:var(--muted); }
+  .nudge.err{ background:color-mix(in srgb, var(--danger) 12%, transparent); }
+  .nudge.err b{ color:var(--danger); }
+  .linkbtn{ background:none; border:none; padding:0; color:var(--text); font-weight:600; cursor:pointer; text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line); }
+  .backup-status{ font-size:14px; margin-bottom:16px; }
+  .backup-status .muted{ color:var(--muted); }
+
   /* pressing picker */
   .press-tools{ display:flex; gap:14px; align-items:center; margin-bottom:12px; }
   .check{ display:flex; align-items:center; gap:7px; font-size:14px; color:var(--muted); white-space:nowrap; cursor:pointer; }
@@ -262,6 +280,13 @@
         <button class="btn btn-primary" id="add-btn" data-go="add">Add record</button>
       </div>
     </header>
+    <div class="nudge hidden" id="nudge">
+      <div><b id="nudge-title"></b><span id="nudge-text"></span></div>
+      <button class="btn btn-primary" id="nudge-btn">Back up</button>
+      <button class="icon-btn" id="nudge-later" aria-label="Remind me later" title="Remind me later">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
     <div id="list-controls">
       <div class="toolbar">
         <label class="search">
@@ -407,13 +432,15 @@
     <select id="country-pref" style="max-width:300px"></select>
     <div class="section-label" style="margin-top:36px">Back up &amp; restore</div>
     <div class="panel">
-      <p class="settings-copy">Your crate is saved in this browser. Download a backup to keep it safe or move it to another device.</p>
+      <p class="settings-copy">Your crate is saved in this browser, on this device. Updating the app never touches it, but clearing your browser data or losing your phone would — so keep a backup somewhere else, like iCloud Drive, Google Drive or your email.</p>
+      <div class="backup-status" id="backup-status"></div>
       <div class="actions" style="justify-content:flex-start">
-        <button class="btn" id="export-btn">Download backup</button>
+        <button class="btn btn-primary" id="export-btn">Back up now</button>
         <button class="btn" id="export-csv-btn">Export CSV</button>
         <button class="btn" id="import-btn">Restore from backup</button>
         <input type="file" id="import-file" accept="application/json,.json" class="hidden">
       </div>
+      <p class="settings-copy hidden" id="snapshot-row" style="margin-top:20px"></p>
     </div>
     <p class="src">Album data from <a href="https://musicbrainz.org" target="_blank" rel="noopener">MusicBrainz</a>, artwork from the <a href="https://coverartarchive.org" target="_blank" rel="noopener">Cover Art Archive</a> and iTunes.</p>
   </section>
@@ -446,15 +473,81 @@
 (() => {
   'use strict';
 
-  /* ---------- storage ---------- */
+  /* ---------- storage ----------
+     Every saved record lives under KEY. Never rename it or drop fields from records: app updates must
+     read whatever older versions saved (see migrate) — otherwise an update would look like a lost crate. */
   const KEY = 'crate.records.v1';
+  const SNAPSHOT_KEY = 'crate.records.snapshot';   // automatic copy of the crate, refreshed at most daily
+  const BACKUP_META_KEY = 'crate.backup';           // when the last backup file was made, changes since
+  const SCHEMA = 1;
+  const DAY = 86400000;
   let records = [];
+  let storageLocked = false;   // saved data couldn't be read or set aside, so never write over it
+  let recovered = null;        // set when the crate was restored from the automatic copy on load
+
+  // Bring a record saved by any version of the app up to date, keeping every field it has.
+  function migrate(r){
+    return {
+      ...r,
+      id: r.id || uid(),
+      addedAt: r.addedAt || 0,
+      genres: Array.isArray(r.genres) ? r.genres : String(r.genres || '').split(',').map(g => g.trim()).filter(Boolean),
+    };
+  }
+  const migrateAll = list => list.filter(r => r && typeof r === 'object').map(migrate);
+
+  function readSnapshot(){
+    try {
+      const snap = JSON.parse(localStorage.getItem(SNAPSHOT_KEY));
+      return snap && Array.isArray(snap.records) ? snap : null;
+    } catch(e){ return null; }
+  }
   function load(){
-    try { records = JSON.parse(localStorage.getItem(KEY)) || []; } catch(e){ records = []; }
+    let raw;
+    try { raw = localStorage.getItem(KEY); } catch(e){ storageLocked = true; return; }
+    if (raw === null){ records = []; return; }
+    try {
+      const data = JSON.parse(raw);
+      if (!Array.isArray(data)) throw new Error('not a list');
+      records = migrateAll(data);
+    } catch(e){
+      // Damaged save: set it aside rather than letting an empty crate overwrite it.
+      let setAside = false;
+      try { localStorage.setItem('crate.records.damaged-' + Date.now(), raw); setAside = true; } catch(err){}
+      const snap = readSnapshot();
+      if (snap){
+        records = migrateAll(snap.records); recovered = snap;
+        try { localStorage.setItem(KEY, JSON.stringify(records)); } catch(err){}
+      } else {
+        records = []; storageLocked = !setAside;
+      }
+    }
+  }
+  function snapshot(force){
+    try {
+      const snap = readSnapshot();
+      if (!force && snap && Date.now() - snap.at < DAY) return;
+      const prev = JSON.parse(localStorage.getItem(KEY) || '[]');
+      if (Array.isArray(prev) && prev.length) localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ at: Date.now(), records: prev }));
+    } catch(e){ /* the copy is a bonus; never block a save over it */ }
   }
   function save(){
+    if (storageLocked){ toast('Not saved — your crate couldn’t be read. Restore a backup in Settings first.'); return false; }
+    snapshot();
     try { localStorage.setItem(KEY, JSON.stringify(records)); }
-    catch(e){ toast('Could not save — storage is full or blocked'); }
+    catch(e){ toast('Could not save — storage is full or blocked'); return false; }
+    const meta = backupMeta(); meta.changes = (meta.changes || 0) + 1; setBackupMeta(meta);
+    requestPersist();
+    return true;
+  }
+  function backupMeta(){ try { return JSON.parse(localStorage.getItem(BACKUP_META_KEY)) || {}; } catch(e){ return {}; } }
+  function setBackupMeta(m){ try { localStorage.setItem(BACKUP_META_KEY, JSON.stringify(m)); } catch(e){} }
+  // Ask the browser not to clear our storage when space runs low.
+  let persistAsked = false;
+  function requestPersist(){
+    if (persistAsked || !navigator.storage || !navigator.storage.persist) return;
+    persistAsked = true;
+    navigator.storage.persist().catch(() => {});
   }
 
   /* ---------- helpers ---------- */
@@ -525,6 +618,7 @@
     current = name;
     window.scrollTo(0, 0);
     if (name === 'list') renderList();
+    if (name === 'settings') renderBackupStatus();
     if (name === 'add') setTimeout(() => $('#q-artist').focus(), 50);
   }
   document.addEventListener('click', e => {
@@ -546,6 +640,7 @@
     $('#empty').classList.toggle('hidden', n > 0);
     $('#list-controls').classList.toggle('hidden', n === 0);
     $('#add-btn').classList.toggle('hidden', n === 0);
+    renderNudge();
     document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === view));
 
     // genre chips
@@ -599,6 +694,34 @@
   $('#grid').addEventListener('click', e => {
     const c = e.target.closest('.card'); if (c) showDetail(c.dataset.id);
   });
+
+  /* ---------- backup reminder ---------- */
+  function renderNudge(){
+    const el = $('#nudge');
+    let title = '', text = '', btn = 'Back up', err = false;
+    if (storageLocked){
+      title = 'Your saved crate couldn’t be read'; err = true; btn = 'Restore';
+      text = 'Nothing has been deleted. Restore your latest backup to carry on.';
+    } else if (recovered){
+      title = 'Your crate was recovered'; err = true; btn = 'OK';
+      text = `The saved data was damaged, so it was restored from the automatic copy of ${new Date(recovered.at).toLocaleDateString()}. Anything added after that may be missing — check your latest backup.`;
+    } else if (records.length){
+      const m = backupMeta(), changes = m.changes || 0, now = Date.now();
+      const due = changes >= (m.remindAt || (m.lastAt ? 10 : 3))
+        || (changes > 0 && m.lastAt && now - m.lastAt > 30 * DAY && now - (m.snoozedAt || 0) > 7 * DAY);
+      if (due){
+        title = m.lastAt ? `${changes} change${changes === 1 ? '' : 's'} since your last backup` : 'Back up your crate';
+        text = 'Keep a copy off this device so you never lose it.';
+      }
+    }
+    el.classList.toggle('hidden', !title); el.classList.toggle('err', err);
+    $('#nudge-later').classList.toggle('hidden', err);
+    $('#nudge-title').textContent = title; $('#nudge-text').textContent = text; $('#nudge-btn').textContent = btn;
+  }
+  $('#nudge-btn').onclick = () => storageLocked ? go('settings') : recovered ? (recovered = null, renderNudge()) : backup();
+  $('#nudge-later').onclick = () => {
+    const m = backupMeta(); m.remindAt = (m.changes || 0) + 10; m.snoozedAt = Date.now(); setBackupMeta(m); renderNudge();
+  };
 
   /* ---------- detail ---------- */
   function showDetail(id){
@@ -833,7 +956,7 @@
     return lookupCatalog(text);
   }
 
-  async function lookupCatalog(text){
+  async function lookupCatalog(text, triedBarcode){
     $('#q-barcode').value = text;
     $('#barcode-form').after($('#lookup-out'));
     $('#results').innerHTML = ''; $('#manual').classList.add('hidden');
@@ -854,7 +977,9 @@
     if (!candidates.length){
       setStatus(res.error
         ? 'Couldn’t reach MusicBrainz. Check your connection and try again.'
-        : `No release with catalog # ${text}. Check it against the spine or label, or search by name below.`, false, true);
+        : triedBarcode
+          ? `No match for ${text} as a barcode or catalog #. Search by artist and album below — it will be saved with the record.`
+          : `No release with catalog # ${text}. Check it against the spine or label, or search by name below.`, false, true);
       $('#manual').classList.remove('hidden');
       return;
     }
@@ -895,7 +1020,7 @@
       }));
     }
 
-    if (!candidates.length && catalogFallback && !res.error) return lookupCatalog(String(raw).trim());
+    if (!candidates.length && catalogFallback && !res.error) return lookupCatalog(String(raw).trim(), true);
     if (!candidates.length){
       setStatus(res.error
         ? 'Couldn’t reach MusicBrainz. Check your connection and try again.'
@@ -1273,7 +1398,50 @@
   }
   const stamp = () => new Date().toISOString().slice(0, 10);
   $('#settings-btn').onclick = () => go('settings');
-  $('#export-btn').onclick = () => download(`crate-backup-${stamp()}.json`, JSON.stringify({ app: 'crate', version: 1, records }, null, 2), 'application/json');
+  const ago = t => {
+    const d = Math.floor((Date.now() - t) / DAY);
+    return d <= 0 ? 'today' : d === 1 ? 'yesterday' : d + ' days ago';
+  };
+  function renderBackupStatus(){
+    const m = backupMeta(), changes = m.changes || 0;
+    $('#backup-status').innerHTML = !records.length ? '' : m.lastAt
+      ? `Last backup ${esc(ago(m.lastAt))}<span class="muted"> · ${changes ? changes + ' change' + (changes === 1 ? '' : 's') + ' since' : 'up to date'}</span>`
+      : `<span style="color:var(--danger)">Not backed up yet</span>`;
+    const snap = readSnapshot();
+    $('#snapshot-row').classList.toggle('hidden', !snap);
+    if (snap) $('#snapshot-row').innerHTML =
+      `Automatic copy from ${esc(new Date(snap.at).toLocaleDateString())} (${snap.records.length} records). ` +
+      `<button type="button" class="linkbtn" id="snapshot-restore">Restore it</button>`;
+    if (snap) $('#snapshot-restore').onclick = () => replaceCrate(snap.records, `the automatic copy from ${new Date(snap.at).toLocaleDateString()}`);
+  }
+  function markBackedUp(){
+    const m = backupMeta(); setBackupMeta({ ...m, lastAt: Date.now(), changes: 0, remindAt: 0 });
+    renderBackupStatus(); renderNudge(); toast('Backup saved');
+  }
+  // The backup holds every field of every record, so a restore brings back exactly what was saved.
+  async function backup(){
+    const name = `crate-backup-${stamp()}.json`;
+    const text = JSON.stringify({ app: 'crate', version: SCHEMA, exportedAt: new Date().toISOString(),
+                                  settings: { country: prefCountry }, records }, null, 2);
+    // On phones the share sheet can save straight to iCloud Drive, Google Drive or Files, or email it.
+    const file = typeof File === 'function' ? new File([text], name, { type: 'application/json' }) : null;
+    if (file && navigator.canShare && matchMedia('(pointer: coarse)').matches && navigator.canShare({ files: [file] })){
+      try { await navigator.share({ files: [file], title: 'Crate backup' }); markBackedUp(); return; }
+      catch(e){ if (e.name === 'AbortError') return; }
+    }
+    download(name, text, 'application/json');
+    markBackedUp();
+  }
+  function replaceCrate(list, from){
+    if (!confirm(`Replace your crate (${records.length} records) with ${from} (${list.length} records)?`)) return false;
+    snapshot(true);   // keep the current crate as the automatic copy, in case this was a mistake
+    const prev = records, wasLocked = storageLocked;
+    records = migrateAll(list); storageLocked = false;
+    if (!save()){ records = prev; storageLocked = wasLocked; return false; }
+    toast('Restored'); go('list');
+    return true;
+  }
+  $('#export-btn').onclick = backup;
   $('#export-csv-btn').onclick = () => {
     const cols = ['artist', 'album', 'date', 'genres', 'label', 'catalogNo', 'country', 'tracks', 'type', 'format', 'condition', 'pressed', 'barcode', 'notes'];
     const cell = v => `"${String(Array.isArray(v) ? v.join('; ') : v ?? '').replace(/"/g, '""')}"`;
@@ -1287,9 +1455,12 @@
       const data = JSON.parse(await file.text());
       const incoming = Array.isArray(data) ? data : data.records;
       if (!Array.isArray(incoming)) throw new Error('bad file');
-      const valid = incoming.filter(r => r && r.artist && r.album).map(r => ({ id: r.id || uid(), addedAt: r.addedAt || Date.now(), genres: [], ...r }));
-      if (!confirm(`Replace your crate (${records.length} records) with this backup (${valid.length} records)?`)) return;
-      records = valid; save(); toast('Restored'); go('list');
+      const valid = incoming.filter(r => r && r.artist && r.album);
+      if (!valid.length) throw new Error('empty');
+      if (replaceCrate(valid, 'this backup') && data.settings && typeof data.settings.country === 'string'){
+        prefCountry = data.settings.country; $('#country-pref').value = prefCountry;
+        try { localStorage.setItem('crate.country', prefCountry); } catch(e){}
+      }
     } catch(err){ toast('That file isn’t a Crate backup'); }
   });
 
