@@ -205,6 +205,14 @@
   .divider{ display:flex; align-items:center; gap:12px; color:var(--faint); font-size:13px; margin:28px 0 20px; }
   .divider::before,.divider::after{ content:''; flex:1; height:1px; background:var(--line); }
 
+  /* pressing picker */
+  .press-tools{ display:flex; gap:14px; align-items:center; margin-bottom:12px; }
+  .check{ display:flex; align-items:center; gap:7px; font-size:14px; color:var(--muted); white-space:nowrap; cursor:pointer; }
+  .check input{ width:16px; height:16px; accent-color:var(--text); }
+  .result.press{ padding:12px 4px; }
+  .result.press .a .cat{ color:var(--text); font-weight:500; font-variant-numeric:tabular-nums; }
+  .tag.mine{ background:var(--text); color:var(--bg); }
+
   /* scanner overlay — always dark, whatever the theme */
   .scanner{ position:fixed; inset:0; z-index:30; background:#000; color:#fff; overflow:hidden; }
   .scanner video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
@@ -245,7 +253,7 @@
     <header class="top">
       <h1>Crate <span class="sub" id="count"></span></h1>
       <div class="top-actions">
-        <button class="icon-btn" id="settings-btn" title="Back up &amp; restore" aria-label="Back up and restore">
+        <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>
         </button>
         <button class="icon-btn" id="scan-quick" title="Scan a barcode" aria-label="Scan a barcode">
@@ -297,7 +305,7 @@
       <span class="chev" aria-hidden="true">›</span>
     </button>
     <form class="barcode-row" id="barcode-form" autocomplete="off">
-      <input type="text" id="q-barcode" inputmode="numeric" placeholder="Or type the barcode number" aria-label="Barcode number">
+      <input type="text" id="q-barcode" placeholder="Or type a barcode or catalog #" aria-label="Barcode or catalog number" autocapitalize="characters" spellcheck="false">
       <button class="btn" type="submit">Look up</button>
     </form>
     <div class="divider">or search by name</div>
@@ -311,6 +319,24 @@
       <div class="results" id="results"></div>
       <div class="manual hidden" id="manual">Not listed? <button type="button" id="manual-btn">Enter it manually</button></div>
     </div>
+  </section>
+
+  <!-- Add: choose the pressing -->
+  <section class="pane narrow" id="pane-pressing">
+    <button class="back" id="press-back">← Back</button>
+    <h2 style="margin-bottom:4px">Which pressing?</h2>
+    <p class="sub" id="press-sub" style="margin-bottom:22px"></p>
+    <div class="press-tools">
+      <label class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="text" id="press-filter" placeholder="Catalog #, label or barcode" autocomplete="off" spellcheck="false">
+      </label>
+      <label class="check"><input type="checkbox" id="press-vinyl" checked> Vinyl only</label>
+    </div>
+    <div class="chips" id="press-countries" style="margin-bottom:8px"></div>
+    <div class="status hidden" id="press-status"></div>
+    <div class="results" id="press-list"></div>
+    <div class="manual" id="press-skip">Can’t find yours? <button type="button" id="press-skip-btn">Continue without choosing</button></div>
   </section>
 
   <!-- Add/Edit: review form -->
@@ -375,7 +401,11 @@
   <!-- Settings -->
   <section class="pane" id="pane-settings">
     <button class="back" data-go="list">← Crate</button>
-    <h2 class="page-title" style="margin-bottom:10px">Back up &amp; restore</h2>
+    <h2 class="page-title">Settings</h2>
+    <div class="section-label" style="border-top:none;padding-top:0;margin-top:0">Your country</div>
+    <p class="settings-copy">Pressings from this country are listed first when you add a record.</p>
+    <select id="country-pref" style="max-width:300px"></select>
+    <div class="section-label" style="margin-top:36px">Back up &amp; restore</div>
     <div class="panel">
       <p class="settings-copy">Your crate is saved in this browser. Download a backup to keep it safe or move it to another device.</p>
       <div class="actions" style="justify-content:flex-start">
@@ -459,6 +489,34 @@
     if (fb){ img.removeAttribute('data-fallback'); img.src = fb; }
     else img.remove();
   }, true);
+
+  /* ---------- country ---------- */
+  const REGION_NAMES = (() => { try { return new Intl.DisplayNames(['en'], { type: 'region' }); } catch(e){ return null; } })();
+  const SPECIAL_REGIONS = { XW: 'Worldwide', XE: 'Europe', XU: 'Unknown country', XG: 'East Germany', SU: 'USSR', YU: 'Yugoslavia', CS: 'Czechoslovakia' };
+  function countryName(code){
+    if (!code) return 'Unknown country';
+    if (SPECIAL_REGIONS[code]) return SPECIAL_REGIONS[code];
+    try { return (REGION_NAMES && REGION_NAMES.of(code)) || code; } catch(e){ return code; }
+  }
+  const COUNTRY_CHOICES = ['CA', 'US', 'GB', 'IE', 'AU', 'NZ', 'DE', 'FR', 'NL', 'BE', 'IT', 'ES', 'PT', 'SE', 'NO', 'DK', 'FI',
+                           'JP', 'KR', 'MX', 'BR', 'AR', 'ZA'];
+  let prefCountry = null;
+  try { prefCountry = localStorage.getItem('crate.country'); } catch(e){}
+  if (prefCountry === null){
+    // First run: guess from the browser's locale, e.g. en-CA → CA.
+    const region = (navigator.languages || [navigator.language]).map(l => (String(l).split('-')[1] || '').toUpperCase())
+      .find(r => COUNTRY_CHOICES.includes(r));
+    prefCountry = region || '';
+  }
+  $('#country-pref').innerHTML = '<option value="">No preference</option>' + COUNTRY_CHOICES
+    .map(c => [c, countryName(c)]).sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([c, n]) => `<option value="${c}">${esc(n)}</option>`).join('');
+  $('#country-pref').value = prefCountry;
+  $('#country-pref').addEventListener('change', e => {
+    prefCountry = e.target.value;
+    try { localStorage.setItem('crate.country', prefCountry); } catch(err){}
+    toast(prefCountry ? `${countryName(prefCountry)} pressings will be listed first` : 'Saved');
+  });
 
   /* ---------- navigation ---------- */
   let current = 'list';
@@ -546,7 +604,7 @@
   function showDetail(id){
     const r = records.find(x => x.id === id); if (!r) return go('list');
     const rows = [
-      ['Released', r.date], ['Label', r.label], ['Catalog #', r.catalogNo], ['Country', r.country],
+      ['Released', r.date], ['Label', r.label], ['Catalog #', r.catalogNo], ['Country', r.country ? countryName(r.country) : ''],
       ['Tracks', r.tracks], ['Type', r.type], ['Format', r.format], ['Condition', r.condition],
       ['Pressed', year(r.pressed) !== year(r.date) ? r.pressed : ''], ['Barcode', r.barcode],
     ].filter(([, v]) => v);
@@ -564,12 +622,15 @@
           ${r.notes ? `<div class="notes">${esc(r.notes)}</div>` : ''}
           <div class="actions" style="justify-content:flex-start;margin-top:28px">
             <button class="btn" id="d-edit">Edit</button>
+            ${r.mbid ? '<button class="btn" id="d-pressing">Change pressing</button>' : ''}
             <button class="btn btn-danger" id="d-delete">Remove</button>
           </div>
           ${src ? `<div class="src">${src}</div>` : ''}
         </div>
       </div>`;
     $('#d-edit').onclick = () => openEdit(r, 'detail');
+    if (r.mbid) $('#d-pressing').onclick = () => openPressings(
+      { source: 'mb', mbid: r.mbid, artist: r.artist, album: r.album, date: r.date, type: r.type }, 'update', r.id);
     $('#d-delete').onclick = () => {
       if (!confirm(`Remove “${r.album}” from your crate?`)) return;
       records = records.filter(x => x.id !== r.id); save(); go('list'); toast('Removed');
@@ -621,6 +682,31 @@
     const li = (rel['label-info'] || []).find(l => l.label) || {};
     const cat = li['catalog-number'];
     return { label: li.label ? li.label.name : '', catalogNo: cat && cat !== '[none]' ? cat : '' };
+  }
+  const normCat = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  function mediaDesc(media){
+    const f = (media || []).map(m => m.format).filter(Boolean);
+    return f.length ? (f.length > 1 ? f.length + '× ' : '') + f[0] : '';
+  }
+  // Vinyl first, then your country, then oldest.
+  const releaseOrder = (a, b) => (b.isVinyl - a.isVinyl)
+    || ((b.country === prefCountry) - (a.country === prefCountry))
+    || (a.date || '9999').localeCompare(b.date || '9999');
+  // A MusicBrainz release (one specific pressing) as a search candidate.
+  function releaseCandidate(r, base = {}){
+    const g = r['release-group'] || {};
+    const fmt = vinylFormat(r.media);
+    const tracks = (r.media || []).reduce((n, m) => n + (m['track-count'] || 0), 0);
+    const { label, catalogNo } = labelInfo(r);
+    return {
+      source: 'release', releaseId: r.id, mbid: g.id || base.mbid || '',
+      artist: artistCredit(r['artist-credit']) || base.artist || '', album: r.title || base.album || '',
+      date: r.date || '', country: r.country || '', label, catalogNo, format: fmt,
+      barcode: (r.barcode || '').replace(/\D/g, ''), tracks: tracks ? String(tracks) : '',
+      type: g.id ? groupType(g) : (base.type || ''), isVinyl: !!fmt,
+      thumb: caaRelease(r.id, 250), thumbFallback: (g.id || base.mbid) ? caa(g.id || base.mbid, 250) : '',
+      detail: [year(r.date), r.country ? countryName(r.country) : '', catalogNo || label, mediaDesc(r.media)].filter(Boolean).join(' · '),
+    };
   }
   // Map MusicBrainz media (e.g. two '12" Vinyl' discs) onto the format menu.
   function vinylFormat(media){
@@ -717,7 +803,9 @@
 
   $('#results').addEventListener('click', async e => {
     const b = e.target.closest('.result'); if (!b) return;
-    choose(candidates[+b.dataset.i]);
+    const c = candidates[+b.dataset.i];
+    if (c.source === 'mb') openPressings(c, 'add');
+    else choose(c);
   });
   async function choose(c){
     const seq = ++lookupSeq;
@@ -729,14 +817,53 @@
   }
 
   $('#manual-btn').addEventListener('click', () => {
+    const code = $('#q-barcode').value.trim();
+    const isBarcode = /^\d{8,14}$/.test(code.replace(/[\s-]/g, ''));
     openEdit({ artist: $('#q-artist').value.trim(), album: $('#q-album').value.trim(),
-               barcode: $('#q-barcode').value.replace(/\D/g, '') }, 'add', true);
+               barcode: isBarcode ? code.replace(/\D/g, '') : '', catalogNo: isBarcode ? '' : code }, 'add', true);
   });
 
   /* ---------- barcode lookup ---------- */
-  $('#barcode-form').addEventListener('submit', e => { e.preventDefault(); lookupBarcode($('#q-barcode').value); });
+  $('#barcode-form').addEventListener('submit', e => { e.preventDefault(); lookupCode($('#q-barcode').value); });
 
-  async function lookupBarcode(raw){
+  // Typed codes: 8–14 digits is probably a barcode; anything else (or a barcode with no match) is a catalog number.
+  function lookupCode(raw){
+    const text = String(raw).trim();
+    if (/^\d{8,14}$/.test(text.replace(/[\s-]/g, ''))) return lookupBarcode(text, true);
+    return lookupCatalog(text);
+  }
+
+  async function lookupCatalog(text){
+    $('#q-barcode').value = text;
+    $('#barcode-form').after($('#lookup-out'));
+    $('#results').innerHTML = ''; $('#manual').classList.add('hidden');
+    const qn = normCat(text);
+    if (qn.length < 2) return setStatus('Type the barcode, or the catalog number from the spine or label (e.g. XBS 3010).', false, true);
+    const seq = ++lookupSeq;
+    setStatus(`Looking up catalog # ${text}…`, true);
+    // Catalog numbers get entered with and without spaces/dashes, so try both.
+    const variants = new Set([text.replace(/\s+/g, ' '), text.replace(/[\s-]+/g, '')]);
+    const q = [...variants].map(v => `catno:"${lucene(v)}"`).join(' OR ');
+    const res = await mb('release/?limit=50&query=' + encodeURIComponent(q)).catch(err => ({ error: err }));
+    if (seq !== lookupSeq) return;
+    const all = res.releases || [];
+    let rels = all.filter(r => (r['label-info'] || []).some(l => normCat(l['catalog-number']) === qn));
+    const close = !rels.length;
+    if (close) rels = all.filter(r => r.score >= 90).slice(0, 10);
+    candidates = rels.map(r => releaseCandidate(r)).sort(releaseOrder);
+    if (!candidates.length){
+      setStatus(res.error
+        ? 'Couldn’t reach MusicBrainz. Check your connection and try again.'
+        : `No release with catalog # ${text}. Check it against the spine or label, or search by name below.`, false, true);
+      $('#manual').classList.remove('hidden');
+      return;
+    }
+    if (candidates.length === 1 && !close) return choose(candidates[0]);
+    setStatus(close ? 'No exact match — closest results:' : 'Several releases use this catalog number — pick yours:');
+    renderCandidates();
+  }
+
+  async function lookupBarcode(raw, catalogFallback){
     const code = String(raw).replace(/\D/g, '');
     $('#q-barcode').value = code;
     $('#barcode-form').after($('#lookup-out'));
@@ -755,21 +882,8 @@
 
     candidates = (res.releases || [])
       .filter(r => variants.has((r.barcode || '').replace(/\D/g, '')))
-      .map(r => {
-        const g = r['release-group'] || {};
-        const fmt = vinylFormat(r.media);
-        const media = (r.media || []).map(m => m.format).filter(Boolean);
-        const tracks = (r.media || []).reduce((n, m) => n + (m['track-count'] || 0), 0);
-        const { label, catalogNo } = labelInfo(r);
-        return {
-          source: 'release', releaseId: r.id, mbid: g.id, artist: artistCredit(r['artist-credit']), album: r.title,
-          date: r.date || '', country: r.country || '', label, catalogNo, format: fmt, barcode: code,
-          tracks: tracks ? String(tracks) : '', type: groupType(g), isVinyl: !!fmt,
-          thumb: caaRelease(r.id, 250), thumbFallback: g.id ? caa(g.id, 250) : '',
-          detail: [year(r.date), r.country, label, media.length ? (media.length > 1 ? media.length + '× ' : '') + media[0] : ''].filter(Boolean).join(' · '),
-        };
-      })
-      .sort((a, b) => b.isVinyl - a.isVinyl);
+      .map(r => ({ ...releaseCandidate(r), barcode: code }))
+      .sort(releaseOrder);
 
     // Not in MusicBrainz? iTunes knows the UPCs of many digital releases.
     if (!candidates.length){
@@ -781,6 +895,7 @@
       }));
     }
 
+    if (!candidates.length && catalogFallback && !res.error) return lookupCatalog(String(raw).trim());
     if (!candidates.length){
       setStatus(res.error
         ? 'Couldn’t reach MusicBrainz. Check your connection and try again.'
@@ -789,9 +904,139 @@
       return;
     }
     // A single vinyl match: go straight to the review form.
-    if (candidates.length === 1 || (candidates[0].isVinyl && !candidates[1].isVinyl)) return choose(candidates[0]);
+    const vinyl = candidates.filter(c => c.isVinyl);
+    if (candidates.length === 1 || vinyl.length === 1) return choose(vinyl[0] || candidates[0]);
     setStatus('This barcode matches several releases — pick yours:');
     renderCandidates();
+  }
+
+  /* ---------- pressing picker ---------- */
+  // After picking an album by name, list every pressing so the user can choose theirs (e.g. the Canadian one).
+  let press = null, pressSeq = 0;
+  async function openPressings(c, mode, recId){
+    const seq = ++pressSeq;
+    press = { c, mode, recId, list: [], ids: new Set(), country: null, total: 0, done: false };
+    $('#press-sub').textContent = `${c.album} · ${c.artist}`;
+    $('#press-filter').value = ''; $('#press-vinyl').checked = true;
+    $('#press-list').innerHTML = ''; $('#press-countries').innerHTML = '';
+    $('#press-skip').classList.toggle('hidden', mode !== 'add');
+    go('pressing');
+    renderPressings();
+    const add = rels => rels.forEach(r => { if (!press.ids.has(r.id)){ press.ids.add(r.id); press.list.push(r); } });
+    try {
+      // Your country's pressings first, so they show up straight away even for albums with hundreds of releases.
+      if (prefCountry){
+        const r = await mb('release/?limit=100&query=' + encodeURIComponent(`rgid:${c.mbid} AND country:${prefCountry}`));
+        if (seq !== pressSeq) return;
+        add(r.releases || []);
+        if (press.list.length) renderPressings();
+      }
+      for (let offset = 0; offset < 500; offset += 100){
+        const r = await mb(`release?release-group=${c.mbid}&inc=labels+media&limit=100&offset=${offset}`);
+        if (seq !== pressSeq) return;
+        add(r.releases || []);
+        press.total = Math.max(r['release-count'] || 0, press.list.length);
+        renderPressings();
+        if (offset + 100 >= press.total) break;
+      }
+    } catch(err){ press.error = true; }
+    if (seq !== pressSeq) return;
+    press.done = true;
+    if (mode === 'add' && press.list.length === 1) return pickPressing(releaseCandidate(press.list[0], c));
+    if (mode === 'add' && !press.list.length && !press.error) return pickPressing(c);
+    renderPressings();
+  }
+
+  function pressStatus(msg, spin, err){
+    const s = $('#press-status');
+    s.classList.toggle('hidden', !msg); s.classList.toggle('err', !!err);
+    s.innerHTML = msg ? (spin ? '<div class="spinner"></div>' : '') + esc(msg) : '';
+  }
+
+  function renderPressings(){
+    if (!press) return;
+    const all = press.list;
+    const vinylAvail = all.some(r => vinylFormat(r.media));
+    const vinylOnly = $('#press-vinyl').checked && vinylAvail;
+    const base = all.filter(r => !vinylOnly || vinylFormat(r.media));
+    if (press.country === null && base.length) press.country = base.some(r => r.country === prefCountry) ? prefCountry : '';
+    const counts = {};
+    base.forEach(r => { const k = r.country || ''; counts[k] = (counts[k] || 0) + 1; });
+    if (press.country && !counts[press.country]) press.country = '';
+    const countries = Object.keys(counts).sort((a, b) =>
+      ((b === prefCountry) - (a === prefCountry)) || counts[b] - counts[a] || countryName(a).localeCompare(countryName(b)));
+    $('#press-countries').innerHTML = base.length < 2 || countries.length < 2 ? '' :
+      `<button class="chip ${press.country ? '' : 'on'}" data-country="">All<span class="n">${base.length}</span></button>` +
+      countries.map(k => `<button class="chip ${k === press.country ? 'on' : ''}" data-country="${esc(k)}">${esc(countryName(k))}<span class="n">${counts[k]}</span></button>`).join('');
+
+    const ft = $('#press-filter').value.trim().toLowerCase(), fn = normCat(ft);
+    const list = base
+      .filter(r => !press.country || (r.country || '') === press.country)
+      .filter(r => {
+        if (!ft) return true;
+        const li = r['label-info'] || [];
+        if (fn && li.some(l => normCat(l['catalog-number']).includes(fn))) return true;
+        return [...li.map(l => l.label ? l.label.name : ''), r.barcode, countryName(r.country), r.disambiguation]
+          .join(' ').toLowerCase().includes(ft);
+      })
+      .sort((a, b) => ((b.country === prefCountry) - (a.country === prefCountry))
+        || (a.date || '9999').localeCompare(b.date || '9999'));
+
+    $('#press-list').innerHTML = list.map(r => {
+      const li = r['label-info'] || [];
+      const labels = [...new Set(li.map(l => l.label && l.label.name).filter(Boolean))].join(', ');
+      const cats = [...new Set(li.map(l => l['catalog-number']).filter(c => c && c !== '[none]'))].join(', ');
+      const extra = [mediaDesc(r.media), r.disambiguation, r.status && r.status !== 'Official' ? r.status : '',
+                     r.barcode ? 'Barcode ' + r.barcode : ''].filter(Boolean).join(' · ');
+      return `
+      <button class="result press" data-id="${esc(r.id)}">
+        <div class="meta">
+          <div class="t">${esc(countryName(r.country))} · ${esc(year(r.date) || 'Year unknown')}${prefCountry && r.country === prefCountry ? '<span class="tag mine">Your country</span>' : ''}</div>
+          <div class="a">${esc(labels || 'Label unknown')}${cats ? ` · <span class="cat">${esc(cats)}</span>` : ''}</div>
+          ${extra ? `<div class="d">${esc(extra)}</div>` : ''}
+        </div>
+        <span class="chev" aria-hidden="true">›</span>
+      </button>`;
+    }).join('');
+
+    if (!press.done) pressStatus(all.length ? `Loading pressings… ${all.length}${press.total ? ' of ' + press.total : ''}` : 'Loading pressings…', true);
+    else if (press.error && !all.length) pressStatus('Couldn’t reach MusicBrainz. Check your connection and try again.', false, true);
+    else if (!list.length) pressStatus(ft ? 'No pressings match that.' : 'No pressings listed.');
+    else if (vinylOnly === false && $('#press-vinyl').checked && !vinylAvail) pressStatus('No vinyl pressings are listed for this album — showing all formats.');
+    else if (press.total > all.length) pressStatus(`Showing ${all.length} of ${press.total} pressings — type a catalog # above to narrow it down.`);
+    else pressStatus('');
+  }
+  $('#press-filter').addEventListener('input', renderPressings);
+  $('#press-vinyl').addEventListener('change', renderPressings);
+  $('#press-countries').addEventListener('click', e => {
+    const c = e.target.closest('[data-country]'); if (!c) return;
+    press.country = c.dataset.country; renderPressings();
+  });
+  $('#press-list').addEventListener('click', e => {
+    const b = e.target.closest('.result'); if (!b) return;
+    const r = press.list.find(x => x.id === b.dataset.id);
+    if (r) pickPressing(releaseCandidate(r, press.c));
+  });
+  $('#press-skip-btn').onclick = () => pickPressing(press.c);
+  $('#press-back').onclick = () => {
+    pressSeq++;   // stop loading
+    if (press && press.mode === 'update') showDetail(press.recId); else go('add');
+  };
+
+  let pickSeq = 0;
+  async function pickPressing(c){
+    const seq = ++pickSeq;
+    pressStatus('Getting album details…', true);
+    const rec = await enrich(c);
+    if (seq !== pickSeq) return;
+    pressStatus('');
+    if (press.mode !== 'update') return openEdit(rec, press.list.length > 1 ? 'pressing' : 'add', true);
+    // Changing the pressing of a saved record: swap the pressing details, keep everything personal.
+    const old = records.find(x => x.id === press.recId);
+    if (!old) return go('list');
+    openEdit({ ...old, releaseId: rec.releaseId, label: rec.label, catalogNo: rec.catalogNo, country: rec.country,
+               tracks: rec.tracks || old.tracks, pressed: rec.pressed, barcode: rec.barcode || '',
+               format: rec.format || old.format, art: rec.art || old.art }, 'detail');
   }
 
   /* ---------- camera scanner ---------- */

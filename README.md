@@ -6,6 +6,9 @@ Catalog your vinyl. Type in the artist and album, and Crate finds the cover art,
 
 - **Barcode scanning**: point your phone's camera at the barcode on the sleeve (or use a photo, or type the number) to find your exact pressing — label, catalog number, country, year and vinyl format
 - Automatic lookup via [MusicBrainz](https://musicbrainz.org) and the [Cover Art Archive](https://coverartarchive.org), with iTunes as a fallback for artwork and genre
+- **Choose your pressing**: after picking an album, see every pressing with its country, year, label, catalog number and format — your own country listed first (set it in Settings), with filters for country, vinyl only, and catalog #
+- **Catalog number lookup**: type the code from the spine or label (e.g. `XBS 3010`) to find that exact release — handy for older records without a barcode
+- **Change pressing** on records you've already saved
 - Pick the right match when an album has several versions (live, deluxe, etc.), or enter a record manually
 - Track your own copy: format (LP, 2×LP, 7″…), condition grade and notes
 - Covers or list view, search, sort and genre filters
